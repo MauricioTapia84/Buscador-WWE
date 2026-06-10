@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ciencia_datos_agent
+    volumes:
+      - ..:/workspace
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=http://localhost:11434
+    ports:
+      - "11434:11434"  # Exponer API de Ollama por si se requiere acceder desde el host
+    stdin_open: true
+    tty: true
+    command: [ "python", "agent/run_agent.py" ]
+
+volumes:
+  ollama_data:

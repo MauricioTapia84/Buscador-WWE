@@ -1,0 +1,16 @@
+## Ejemplo de configuración de modelos para AgentNova
+models:
+  primary: "qwen2.5-coder:7b"
+  secondary: "llama3.2:3b"
+  coder_alternative: "deepseek-coder:6.7b"
+
+ollama:
+  host: "http://localhost:11434"
+  pull_on_startup: true
+
+agent:
+  session_name: "ciencia_datos_session"
+  default_tools: "all"
+  confirm_before_execution: true
+
+# Copia este archivo a `agent/config/models.yaml` y personaliza según tu entorno.
