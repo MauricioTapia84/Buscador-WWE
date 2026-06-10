@@ -1,0 +1,24 @@
+# Configuración de Modelos para AgentNova
+models:
+  primary: "qwen2.5-coder:7b"
+  secondary: "llama3.2:3b"
+  coder_alternative: "deepseek-coder:6.7b"
+  available:
+    - name: "qwen2.5-coder:7b"
+      provider: "ollama"
+      description: "Modelo potente y especializado en generación de código"
+    - name: "llama3.2:3b"
+      provider: "ollama"
+      description: "Modelo ligero y rápido para tareas generales"
+    - name: "deepseek-coder:6.7b"
+      provider: "ollama"
+      description: "Modelo alternativo muy capaz para programación"
+
+ollama:
+  host: "http://localhost:11434"
+  pull_on_startup: true
+
+agent:
+  session_name: "ciencia_datos_session"
+  default_tools: "all"
+  confirm_before_execution: true
