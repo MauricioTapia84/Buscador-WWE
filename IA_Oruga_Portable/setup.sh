@@ -63,11 +63,13 @@ fi
 
 # 5. Activar e instalar dependencias
 echo "[SETUP] Instalando dependencias en el venv..."
+# Activar venv y usar su Python explícitamente
 source venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
+VENV_PY="$PROJECT_ROOT/venv/bin/python"
+"$VENV_PY" -m pip install --upgrade pip setuptools wheel
 
 # Instalar paquetess básicos
-python -m pip install agentnova || true
+"$VENV_PY" -m pip install agentnova || true
 
 # Instalar todos los requirements disponibles en requirements/
 if [ -d "requirements" ]; then
@@ -87,7 +89,7 @@ fi
 
 # 6. Registrar skill personalizado en AgentNova
 echo "[SETUP] Registrando skill de Ciencia de Datos en AgentNova..."
-AGENTNOVA_SKILLS_DIR=$(python -c "import os, agentnova; print(os.path.join(os.path.dirname(agentnova.__file__), 'skills'))")
+AGENTNOVA_SKILLS_DIR=$("$VENV_PY" -c "import os, agentnova; print(os.path.join(os.path.dirname(agentnova.__file__), 'skills'))")
 
 if [ -d "$AGENTNOVA_SKILLS_DIR" ]; then
     rm -rf "$AGENTNOVA_SKILLS_DIR/data-skills"
@@ -106,13 +108,13 @@ echo "=========================================================="
 # Install backend extraction requirements if present
 if [ -f "backend/requirements_extraction.txt" ]; then
     echo "Installing backend extraction requirements..."
-        python -m pip install -r backend/requirements_extraction.txt || echo "[WARN] pip install backend requirements failed"
+    "$VENV_PY" -m pip install -r backend/requirements_extraction.txt || echo "[WARN] pip install backend requirements failed"
 fi
 
 # Install backend package in editable mode so tests can import `study_system`
 if [ -d "backend" ]; then
     echo "Installing backend package in editable mode (pip install -e backend)..."
-    python -m pip install -e backend || echo "[WARN] pip install -e backend failed"
+    "$VENV_PY" -m pip install -e backend || echo "[WARN] pip install -e backend failed"
 fi
 
 # Ensure tools scripts dir exists

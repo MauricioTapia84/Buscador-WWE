@@ -53,7 +53,11 @@ Este manual explica cómo instalar y usar IA Oruga en una máquina Linux (pasos 
 - Si ejecutaste el script de limpieza que mueve archivos a `old_to_review`, usa `ia-oruga/restore_git.sh` (si existe) o restaura manualmente con `git checkout -- <path>`.
 
 7) Consejos de operación
-- Para desarrollo iterativo, instala el backend en editable: `python -m pip install -e ia-oruga/backend`
+- Para desarrollo iterativo, usa el script de desarrollo que crea un `venv` e instala el backend en editable:
+
+  bash scripts/setup_dev.sh
+  source venv/bin/activate
+
 - Si el CI falla por tests, revisa que el venv contenga `pytest` y que el backend esté instalado editable.
 - Para usar modelos locales (Ollama), asegúrate de tener `ollama` y de que el servicio esté corriendo.
 
