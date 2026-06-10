@@ -1,6 +1,0 @@
-#!/home/mauricio/Documentos/GitHub/Buscador-WWE/IA_Oruga_Portable/venv/bin/python
-import sys
-from localclaw import main
-if __name__ == '__main__':
-    sys.argv[0] = sys.argv[0].removesuffix('.exe')
-    sys.exit(main())

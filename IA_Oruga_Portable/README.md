@@ -8,7 +8,10 @@ Estructura principal
 - `backend/` — herramientas de extracción, `study_system` package y `requirements_extraction.txt`.
 - `docker/` — Dockerfile y `docker-compose.yml` para desplegar localmente.
 - `scripts/` — scripts de construcción y helpers (packaging, limpieza).
+<<<<<<< HEAD
 - `scripts/setup_dev.sh` — script ligero para crear un `venv` de desarrollo e instalar `backend` en modo editable (recomendado para desarrollo local).
+=======
+>>>>>>> origin/main
 - `tools/scripts/crear-exportable.sh` — wrapper para crear el .zip portable.
 - `setup.sh` — script de bootstrap para crear venv, instalar deps y preparar el entorno.
 - `start-oruga.sh` — script para activar el venv y arrancar la app.
@@ -26,6 +29,7 @@ Principales comandos
 
 - Crear paquete portable (desde repo raíz):
 
+<<<<<<< HEAD
   bash scripts/build_ia_oruga_package.sh
 
 - Flujo de desarrollo rápido:
@@ -33,6 +37,9 @@ Principales comandos
   bash scripts/setup_dev.sh  # crea venv e instala backend en editable
   source venv/bin/activate
   # luego puedes ejecutar tests o start-oruga.sh
+=======
+  bash ia-oruga/scripts/build_ia_oruga_package.sh
+>>>>>>> origin/main
 
 Notas de compatibilidad
 - Requiere Python 3.11+ (3.12 recomendado).
