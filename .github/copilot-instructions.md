@@ -55,11 +55,7 @@ Consulta [.github/AGENTS.md](.github/AGENTS.md) para identificar qué agente deb
 - @study-orchestrator facilita la navegación por la documentación técnica y administrativa.
 
 ### Estructura de Custom Agents
-- Orquestador principal: .github/system-orchestrator.agent.md
-- Agentes de programación: .github/agents/programming/
-- Agentes de estudio/docs: .github/agents/study/
-- Agentes de soporte: .github/agents/support/
-- Skills y Instructions: .github/skills/ y .github/instructions/
+ - Agente de ciencia de datos: .github/agents/data/data-science.agent.md
 
 ## 🧭 Jerarquía de Instrucciones
 1. Perfiles especializados en .github/agents/.
