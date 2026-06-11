@@ -1,7 +1,22 @@
-"""ETL: extracción desde Kaggle (placeholder)."""
-def extract():
-    # TODO: implementar extracción desde Kaggle (sqlite or API)
-    print("extract_kaggle: not implemented")
 
-if __name__ == '__main__':
-    extract()
+import sqlite3
+import pandas as pd
+
+conn = sqlite3.connect(
+    "../data/raw/wwe_matches.sqlite"
+)
+
+query = """
+SELECT *
+FROM Matches
+LIMIT 1000
+"""
+
+df = pd.read_sql_query(query, conn)
+
+df.to_csv(
+    "../data/raw/matches.csv",
+    index=False
+)
+
+conn.close()

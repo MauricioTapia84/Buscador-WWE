@@ -1,7 +1,23 @@
-"""ETL: validación de esquemas (placeholder)."""
-def validate():
-    # TODO: validar esquemas y quality checks
-    print("validate: not implemented")
 
-if __name__ == '__main__':
-    validate()
+from pydantic import BaseModel
+
+class Wrestler(BaseModel):
+
+    name: str
+
+    height: str | None = None
+
+    weight: str | None = None
+
+
+def validate_wrestler(data):
+
+    try:
+        Wrestler(**data)
+        return True
+
+    except Exception as e:
+
+        print(e)
+
+        return False
