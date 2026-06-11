@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wrestling
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  etl-runner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.etl
+    depends_on:
+      - db
+    restart: 'no'
+
+volumes:
+  db_data:
