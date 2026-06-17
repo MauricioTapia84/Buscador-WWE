@@ -30,5 +30,16 @@ services:
       - db
     restart: 'no'
 
+  dashboard:
+    build:
+      context: ./dashboards
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8050}:8050"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
 volumes:
   db_data:
