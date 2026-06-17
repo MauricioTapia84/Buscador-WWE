@@ -1,24 +1,27 @@
 
-import requests
 import pandas as pd
+from retry_utils import requests_get_with_retry
+
+
 
 def get_wrestler(name):
     url = f"https://www.thesportsdb.com/api/v1/json/123/searchplayers.php?p={name}"
 
-    response = requests.get(url)
-    data = response.json()
-
-    if not data["player"]:
+    try:
+        response = requests_get_with_retry(url, timeout=5)
+        data = response.json()
+    except Exception:
         return None
-
-    wrestler = data["player"][0]
-
+    players = data.get("player")
+    if not players:
+        return None
+    wrestler = players[0]
     return {
-        "name": wrestler["strPlayer"],
-        "height": wrestler["strHeight"],
-        "weight": wrestler["strWeight"],
-        "nationality": wrestler["strNationality"],
-        "description": wrestler["strDescriptionEN"]
+        "name": wrestler.get("strPlayer"),
+        "height": wrestler.get("strHeight"),
+        "weight": wrestler.get("strWeight"),
+        "nationality": wrestler.get("strNationality"),
+        "description": wrestler.get("strDescriptionEN"),
     }
 
 if __name__ == "__main__":
