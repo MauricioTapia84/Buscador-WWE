@@ -8,15 +8,18 @@ Checklist generado a partir de la pauta de evaluación y el estado actual del re
 
 ## 1) Pipeline ETL (20%)
 
-- [ ] Añadir logging estructurado en `etl/` (format JSON, niveles).
-- [ ] Implementar reintentos y manejo de fallos por etapa (extract/transform/load).
-- [ ] Generar reportes de calidad (CSV/HTML) tras cada ejecución.
+- [x] Añadir logging estructurado en `etl/` (format JSON, niveles).
+- [x] Implementar reintentos y manejo de fallos por etapa (extract/transform/load).
+- [x] Generar reportes de calidad (CSV/HTML) tras cada ejecución.
 
 **Completados (migrados / removidos de la checklist):**
 
 - **Validaciones:** Se consolidaron y mejoraron las validaciones en `etl/validate.py` (Pandera). Archivo: [wrestling-pipeline/etl/validate.py](wrestling-pipeline/etl/validate.py)
 - **Pruebas ETL:** Se añadieron tests unitarios para `transform`, `validate` y `load`. Archivo: [wrestling-pipeline/tests/test_etl.py](wrestling-pipeline/tests/test_etl.py)
 - **CI ETL:** Se creó workflow para ejecutar tests ETL en GitHub Actions. Archivo: [.github/workflows/etl-ci.yml](.github/workflows/etl-ci.yml)
+ - **Logging estructurado:** Se añadió `etl/logging_config.py` con formateador JSON y se instrumentaron los extractores (`extract_wikipedia.py`, `extract_thesportsdb.py`, `extract_kaggle.py`).
+ - **Reintentos:** Se añadió `etl/retry_utils.py` y se aplicaron reintentos en llamadas a request, extracción sqlite y carga a BD.
+ - **Reportes de calidad:** `validate._write_report` ahora emite JSON, CSV y HTML de los reportes de validación.
 
 ## 2) Documentación técnica (20%)
 
