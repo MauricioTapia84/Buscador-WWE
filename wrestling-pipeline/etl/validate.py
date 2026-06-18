@@ -6,8 +6,44 @@ from typing import Tuple
 
 
 def _write_report(report: dict, path: str):
+    # Write JSON
     with open(path, "w", encoding="utf8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
+
+    # If there are error records, write a CSV
+    csv_path = path.replace('.json', '.csv')
+    try:
+        if report.get('errors'):
+            import pandas as _pd
+
+            df_err = _pd.DataFrame(report['errors'])
+            df_err.to_csv(csv_path, index=False, encoding='utf-8')
+        else:
+            # write a small CSV summary
+            with open(csv_path, 'w', encoding='utf8') as _f:
+                _f.write('rows,status,errors_count\n')
+                _f.write(f"{report.get('rows',0)},{report.get('status','')},0\n")
+    except Exception:
+        # best-effort: don't fail reporting
+        pass
+
+    # Write simple HTML report
+    html_path = path.replace('.json', '.html')
+    try:
+        with open(html_path, 'w', encoding='utf8') as hf:
+            hf.write(f"<html><head><meta charset='utf-8'><title>Validation report</title></head><body>")
+            hf.write(f"<h1>Validation report</h1><p>rows: {report.get('rows',0)}</p>")
+            hf.write(f"<p>status: {report.get('status','')}</p>")
+            if report.get('errors'):
+                import pandas as _pd
+
+                df_err = _pd.DataFrame(report['errors'])
+                hf.write(df_err.to_html(index=False, escape=True))
+            else:
+                hf.write('<p>No errors</p>')
+            hf.write('</body></html>')
+    except Exception:
+        pass
 
 
 def validate_wrestlers(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:

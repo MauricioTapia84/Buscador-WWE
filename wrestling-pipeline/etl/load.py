@@ -2,8 +2,10 @@
 import sqlite3
 import pandas as pd
 from typing import Optional
+from retry_utils import retry_on_exception
 
 
+@retry_on_exception(attempts=3)
 def load_data(wrestlers_df: Optional[pd.DataFrame] = None, champions_df: Optional[pd.DataFrame] = None, db_path: str = "../data/processed/wrestling.db"):
     """Persist provided DataFrames to sqlite database. Creates tables `wrestlers` and `champions` when provided."""
     conn = sqlite3.connect(db_path)

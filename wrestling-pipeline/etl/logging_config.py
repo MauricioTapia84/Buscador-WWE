@@ -13,7 +13,25 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
-        return json.dumps(payload)
+
+        # Include any extra fields passed via `extra` in logging calls
+        skip_keys = {
+            'name', 'msg', 'args', 'levelname', 'levelno', 'pathname', 'filename', 'module', 'exc_info',
+            'exc_text', 'stack_info', 'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
+            'thread', 'threadName', 'processName', 'process'
+        }
+        for k, v in record.__dict__.items():
+            if k in skip_keys:
+                continue
+            if k in payload:
+                continue
+            try:
+                json.dumps(v)
+                payload[k] = v
+            except Exception:
+                payload[k] = str(v)
+
+        return json.dumps(payload, ensure_ascii=False)
 
 
 def configure_logging(level=logging.INFO):

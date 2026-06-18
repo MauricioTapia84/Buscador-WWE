@@ -10,10 +10,13 @@ Checklist generado a partir de la pauta de evaluación y el estado actual del re
 
 - [ ] Añadir logging estructurado en `etl/` (format JSON, niveles).
 - [ ] Implementar reintentos y manejo de fallos por etapa (extract/transform/load).
-- [ ] Añadir validaciones de esquema más exhaustivas en `validate.py`.
 - [ ] Generar reportes de calidad (CSV/HTML) tras cada ejecución.
-- [ ] Añadir pruebas unitarias y de integración adicionales para ETL (`tests/test_etl.py`).
-- [ ] Automatizar ejecución del ETL en CI (GitHub Actions).
+
+**Completados (migrados / removidos de la checklist):**
+
+- **Validaciones:** Se consolidaron y mejoraron las validaciones en `etl/validate.py` (Pandera). Archivo: [wrestling-pipeline/etl/validate.py](wrestling-pipeline/etl/validate.py)
+- **Pruebas ETL:** Se añadieron tests unitarios para `transform`, `validate` y `load`. Archivo: [wrestling-pipeline/tests/test_etl.py](wrestling-pipeline/tests/test_etl.py)
+- **CI ETL:** Se creó workflow para ejecutar tests ETL en GitHub Actions. Archivo: [.github/workflows/etl-ci.yml](.github/workflows/etl-ci.yml)
 
 ## 2) Documentación técnica (20%)
 
