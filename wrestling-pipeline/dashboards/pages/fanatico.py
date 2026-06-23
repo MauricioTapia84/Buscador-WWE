@@ -15,6 +15,73 @@ st.set_page_config(
 API_URL = os.getenv("API_URL", "http://api:8000")
 
 # =========================================
+# CARGAR CSS GLOBAL
+# =========================================
+assets = Path(__file__).parent.parent / "assets"
+if (assets / "style.css").exists():
+    with open(assets / "style.css", encoding="utf-8") as f:
+        st.markdown(
+            f"<style>{f.read()}</style>",
+            unsafe_allow_html=True
+        )
+
+# =========================================
+# CONTROL DE ACCESO & MENÚ DINÁMICO
+# =========================================
+if "role" not in st.session_state:
+    st.session_state["role"] = "usuario"
+
+# Ocultar la página de desarrollador si no es administrador
+if st.session_state["role"] != "administrador":
+    st.markdown(
+        """
+        <style>
+        a[href*="desarrollador"] {
+            display: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Menú superior dinámico
+col_menu, col_logout = st.columns([5, 1])
+
+with col_menu:
+    if st.session_state["role"] == "administrador":
+        st.markdown(
+            """
+            <div class="top-menu">
+                <a href="/" target="_self">🏠 Dashboard</a>
+                <a href="/fanatico" target="_self">👤 Fanático</a>
+                <a href="/periodista" target="_self">📊 Periodista</a>
+                <a href="/desarrollador" target="_self">💻 Desarrollador</a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            """
+            <div class="top-menu">
+                <a href="/" target="_self">🏠 Dashboard</a>
+                <a href="/fanatico" target="_self">👤 Fanático</a>
+                <a href="/periodista" target="_self">📊 Periodista</a>
+                <span style='margin-left: 20px; color: #7a8aa3; font-size: 14px;'>👤 Modo Usuario (Ingresa la clave en el buscador para modo Admin)</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+with col_logout:
+    if st.session_state["role"] == "administrador":
+        if st.button("🔴 Salir de Admin", key="logout_btn_fan"):
+            st.session_state["role"] = "usuario"
+            st.experimental_rerun()
+
+st.write("")
+
+# =========================================
 # DATA
 # =========================================
 
@@ -53,131 +120,16 @@ def search_wrestlers(query: str):
 wrestlers, titles = fetch_lists()
 
 # =========================================
-# LAYOUT PRINCIPAL
+# CABECERA DEL BUSCADOR
 # =========================================
-
-main_html = textwrap.dedent(f"""
-    <div class="dashboard-layout">
-
-        <div class="sidebar-panel">
-            <div class="logo">WWE DATA</div>
-            <div class="menu">
-                <div class="menu-item">🏠 Dashboard</div>
-                <div class="menu-item active">👤 Fanático</div>
-                <div class="menu-item">📊 Periodista</div>
-                <div class="menu-item">💻 Desarrollador</div>
-                <div class="menu-item">⚙ Configuración</div>
-            </div>
-        </div>
-
-        <div class="main-panel">
-            <div class="hero">
-                <div class="hero-left">
-                    <div class="badge">🏆 WWE Analytics Platform</div>
-                    <h1>Wrestling Data Explorer</h1>
-                    <h2>Buscador Inteligente de Leyendas WWE</h2>
-                    <p>
-                        Explora luchadores, campeonatos, estadísticas históricas
-                        y monitorea el pipeline ETL desde una plataforma moderna
-                        diseñada para fanáticos, periodistas y desarrolladores.
-                    </p>
-                    <div class="hero-buttons">
-                        <div class="btn btn-primary">🔍 Explorar</div>
-                        <div class="btn btn-secondary">📊 Estadísticas</div>
-                    </div>
-                </div>
-                <div class="hero-right">
-                    <div class="stat-card">
-                        <div class="stat-icon">🤼</div>
-                        <div class="stat-number">{len(wrestlers)}</div>
-                        <div class="stat-label">Wrestlers</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🏆</div>
-                        <div class="stat-number">{len(titles)}</div>
-                        <div class="stat-label">Títulos</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🌐</div>
-                        <div class="stat-number">Online</div>
-                        <div class="stat-label">API</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">⚙️</div>
-                        <div class="stat-number">Activo</div>
-                        <div class="stat-label">Pipeline</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="kpis">
-                <div class="kpi">
-                    <div class="kpi-title">Combates Registrados</div>
-                    <div class="kpi-value">4,523</div>
-                </div>
-                <div class="kpi">
-                    <div class="kpi-title">Eventos</div>
-                    <div class="kpi-value">320</div>
-                </div>
-                <div class="kpi">
-                    <div class="kpi-title">Años de Historia</div>
-                    <div class="kpi-value">40+</div>
-                </div>
-                <div class="kpi">
-                    <div class="kpi-title">Disponibilidad</div>
-                    <div class="kpi-value">99%</div>
-                </div>
-            </div>
-
-            <div class="cards">
-                <div class="card">
-                    <h3>⭐ Fanático</h3>
-                    <p>
-                        Descubre biografías, rivalidades, campeonatos
-                        y momentos históricos.
-                    </p>
-                </div>
-                <div class="card">
-                    <h3>📊 Periodista</h3>
-                    <p>
-                        Analiza estadísticas, rankings, reinados
-                        y tendencias históricas.
-                    </p>
-                </div>
-                <div class="card">
-                    <h3>💻 Desarrollador</h3>
-                    <p>
-                        Monitorea ETL, API, logs, validaciones
-                        y calidad de datos.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-"""
-)
-
-assets = Path(__file__).parent.parent / "assets"
-
-page_css = ""
-if assets.exists():
-    try:
-        with open(assets / "style.css", encoding="utf-8") as f:
-            page_css = f.read()
-    except Exception:
-        page_css = ""
-
-components.html(
-    f"""
-    <style>
-    {page_css}
-    </style>
-    {main_html.strip()}
-    """,
-    height=820,
-)
-
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("""
+<div class="hero" style="padding: 40px; margin-bottom: 20px;">
+    <h1>🔍 Buscador de Leyendas WWE</h1>
+    <p style="font-size: 16px; color: #cbd5e1;">
+        Encuentra perfiles de tus luchadores favoritos, revisa biografías, peso, altura y detalles de los campeonatos de forma interactiva.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 st.subheader("🔎 Búsqueda Global")
 
@@ -186,64 +138,110 @@ search_term = st.text_input(
     placeholder="Ej: The Undertaker"
 )
 
+def render_wrestler_card(w):
+    name = w.get("name", "N/A")
+    height = f"{w.get('height_cm')} cm" if w.get('height_cm') else "N/A"
+    weight = f"{w.get('weight_kg')} kg" if w.get('weight_kg') else "N/A"
+    nat = w.get("nationality") or "Desconocido"
+    debut = w.get("debut_year") or "N/A"
+    desc = w.get("description") or "Sin descripción disponible."
+    
+    nat_lower = str(nat).lower()
+    flag = "🇺🇸"
+    if "mex" in nat_lower:
+        flag = "🇲🇽"
+    elif "can" in nat_lower:
+        flag = "🇨🇦"
+    elif "jpn" in nat_lower or "jap" in nat_lower:
+        flag = "🇯🇵"
+    elif "gbr" in nat_lower or "uk" in nat_lower or "ing" in nat_lower:
+        flag = "🇬🇧"
+    elif "descon" in nat_lower or not nat or nat == "Desconocido":
+        flag = "🤼"
+        
+    return f"""
+    <div class="result-card">
+        <div class="result-card-header">
+            <div class="wrestler-info">
+                <div class="avatar-placeholder">{flag}</div>
+                <div>
+                    <div class="wrestler-name">{name}</div>
+                    <div class="wrestler-meta">
+                        <span>📏 {height}</span>
+                        <span>⚖️ {weight}</span>
+                        <span>🏛️ {nat}</span>
+                        <span>📅 Debut: {debut}</span>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <span class="badge-title">🤼 Wrestler</span>
+            </div>
+        </div>
+        <div class="result-card-body" style="grid-template-columns: 1fr;">
+            <div>
+                <div class="section-title">📝 Biografía / Descripción</div>
+                <p style="color: #cbd5e1; line-height: 1.6; font-size: 14px;">{desc}</p>
+            </div>
+        </div>
+    </div>
+    """
+
+def render_title_card(t):
+    title = t.get("title") or t.get("name") or "N/A"
+    holder = t.get("holder") or "Vacante"
+    won_date = t.get("won_date") or "N/A"
+    reign_days = t.get("reign_days")
+    reign_str = f"{reign_days} días" if reign_days is not None else "N/A"
+    
+    return f"""
+    <div class="result-card">
+        <div class="result-card-header">
+            <div class="wrestler-info">
+                <div class="avatar-placeholder">🏆</div>
+                <div>
+                    <div class="wrestler-name">{title}</div>
+                    <div class="wrestler-meta">
+                        <span>👑 Campeón: <strong>{holder}</strong></span>
+                        <span>📅 Ganado: {won_date}</span>
+                        <span>⏱️ Reinado: {reign_str}</span>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <span class="badge-title" style="background: #ef444420; color: #ef4444; border-color: #ef444440;">🏆 Campeonato</span>
+            </div>
+        </div>
+    </div>
+    """
+
 if search_term:
+    if search_term.strip() == "K#9vLp$2mQx@7nRf!4Zd":
+        st.session_state["role"] = "administrador"
+        st.success("🔓 ¡Modo Administrador activado!")
+        st.experimental_rerun()
     result = search_wrestlers(search_term)
     st.success(f"Mostrando resultados para: {search_term}")
 
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.image(
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Wrestling_ring.jpg/640px-Wrestling_ring.jpg",
-            use_container_width=True
-        )
+        st.markdown("<h3>🤼 Wrestlers</h3>", unsafe_allow_html=True)
+        wrestlers_list = result.get("wrestlers", [])
+        if wrestlers_list:
+            for w in wrestlers_list:
+                st.markdown(render_wrestler_card(w), unsafe_allow_html=True)
+        else:
+            st.info("No se encontraron luchadores.")
 
     with col2:
-        st.markdown(
-            f"""
-            ### {search_term}
-
-            **Nombre completo:** {result.get('name', 'The Undertaker')}
-
-            **Altura:** {result.get('height', '2.08 m')}
-
-            **Peso:** {result.get('weight', '140 kg')}
-
-            **Debut:** {result.get('debut', '1990')}
-
-            **Estado:** {result.get('status', 'Retirado')}
-
-            **Alias:** {result.get('alias', 'The Deadman')}
-            """,
-        )
-
-    st.divider()
-    st.subheader("🏆 Palmarés")
-
-    titles_df = pd.DataFrame({
-        "Título": [
-            "WWE Championship",
-            "World Heavyweight Championship",
-            "Tag Team Championship"
-        ],
-        "Veces": [4, 3, 6]
-    })
-
-    st.dataframe(
-        titles_df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.subheader("🔥 Logros destacados")
-    st.markdown(
-        """
-        - Récord histórico en WrestleMania.
-        - Miembro del Salón de la Fama WWE.
-        - Más de tres décadas de carrera.
-        - Uno de los personajes más icónicos de la lucha libre.
-        """
-    )
+        st.markdown("<h3>🏆 Titles</h3>", unsafe_allow_html=True)
+        titles_list = result.get("titles", [])
+        if titles_list:
+            for t in titles_list:
+                st.markdown(render_title_card(t), unsafe_allow_html=True)
+        else:
+            st.info("No se encontraron campeonatos.")
 else:
     st.info("Ingresa un nombre para comenzar la búsqueda.")
 

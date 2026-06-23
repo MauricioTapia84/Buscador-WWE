@@ -1,6 +1,64 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
+
+# =========================================
+# CARGAR CSS GLOBAL
+# =========================================
+
+assets = Path(__file__).parent.parent / "assets"
+if (assets / "style.css").exists():
+    with open(assets / "style.css", encoding="utf-8") as f:
+        st.markdown(
+            f"<style>{f.read()}</style>",
+            unsafe_allow_html=True
+        )
+
+# =========================================
+# CONTROL DE ACCESO & MENÚ DINÁMICO
+# =========================================
+if "role" not in st.session_state:
+    st.session_state["role"] = "usuario"
+
+# Ocultar y denegar acceso si no es admin
+if st.session_state["role"] != "administrador":
+    st.markdown(
+        """
+        <style>
+        a[href*="desarrollador"] {
+            display: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    st.error("🔒 Acceso denegado. Esta vista está reservada para el modo administrador.")
+    st.info("Introduce la contraseña de administrador en la barra de búsqueda para acceder.")
+    st.stop()
+
+# Menú superior dinámico para el administrador
+col_menu, col_logout = st.columns([5, 1])
+
+with col_menu:
+    st.markdown(
+        """
+        <div class="top-menu">
+            <a href="/" target="_self">🏠 Dashboard</a>
+            <a href="/fanatico" target="_self">👤 Fanático</a>
+            <a href="/periodista" target="_self">📊 Periodista</a>
+            <a href="/desarrollador" target="_self">💻 Desarrollador</a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col_logout:
+    if st.button("🔴 Salir de Admin", key="logout_btn_dev"):
+        st.session_state["role"] = "usuario"
+        st.experimental_rerun()
+
+st.write("")
 
 # ===================================
 # CABECERA
