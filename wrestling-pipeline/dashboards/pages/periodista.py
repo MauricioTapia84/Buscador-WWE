@@ -1,8 +1,77 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
 st.set_page_config(layout="wide")
+
+# =========================================
+# CARGAR CSS GLOBAL
+# =========================================
+
+assets = Path(__file__).parent.parent / "assets"
+if (assets / "style.css").exists():
+    with open(assets / "style.css", encoding="utf-8") as f:
+        st.markdown(
+            f"<style>{f.read()}</style>",
+            unsafe_allow_html=True
+        )
+
+# =========================================
+# CONTROL DE ACCESO & MENÚ DINÁMICO
+# =========================================
+if "role" not in st.session_state:
+    st.session_state["role"] = "usuario"
+
+# Ocultar la página de desarrollador si no es administrador
+if st.session_state["role"] != "administrador":
+    st.markdown(
+        """
+        <style>
+        a[href*="desarrollador"] {
+            display: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Menú superior dinámico
+col_menu, col_logout = st.columns([5, 1])
+
+with col_menu:
+    if st.session_state["role"] == "administrador":
+        st.markdown(
+            """
+            <div class="top-menu">
+                <a href="/" target="_self">🏠 Dashboard</a>
+                <a href="/fanatico" target="_self">👤 Fanático</a>
+                <a href="/periodista" target="_self">📊 Periodista</a>
+                <a href="/desarrollador" target="_self">💻 Desarrollador</a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            """
+            <div class="top-menu">
+                <a href="/" target="_self">🏠 Dashboard</a>
+                <a href="/fanatico" target="_self">👤 Fanático</a>
+                <a href="/periodista" target="_self">📊 Periodista</a>
+                <span style='margin-left: 20px; color: #7a8aa3; font-size: 14px;'>👤 Modo Usuario (Ingresa la clave en el buscador para modo Admin)</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+with col_logout:
+    if st.session_state["role"] == "administrador":
+        if st.button("🔴 Salir de Admin", key="logout_btn_per"):
+            st.session_state["role"] = "usuario"
+            st.experimental_rerun()
+
+st.write("")
 
 # ==========================
 # CABECERA

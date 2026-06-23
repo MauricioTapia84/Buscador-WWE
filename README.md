@@ -27,3 +27,7 @@ Probar API:
 Notas:
 - El servicio `etl-runner` está configurado con `restart: 'no'` para correr una vez y terminar.
 - Si necesitas ver logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
+
+### Credenciales de Administrador:
+Para activar el modo administrador en la interfaz web, introduce la siguiente contraseña en cualquiera de los buscadores de luchadores:
+`K#9vLp$2mQx@7nRf!4Zd`
