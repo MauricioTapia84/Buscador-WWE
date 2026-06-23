@@ -40,16 +40,28 @@ def clean_wrestlers(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
 
     # Try to coerce numeric columns
     if "height_cm" in df.columns:
-        df["height_cm"] = pd.to_numeric(df["height_cm"], errors="coerce")
+        df["height_cm"] = pd.to_numeric(df["height_cm"], errors="coerce").astype("float64")
     if "weight_kg" in df.columns:
-        df["weight_kg"] = pd.to_numeric(df["weight_kg"], errors="coerce")
+        df["weight_kg"] = pd.to_numeric(df["weight_kg"], errors="coerce").astype("float64")
+    if "debut_year" in df.columns:
+        df["debut_year"] = pd.to_numeric(df["debut_year"], errors="coerce").astype("Int64")
 
     df = df.drop_duplicates(subset=[c for c in ["name"] if c in df.columns])
 
     # Ensure expected columns exist
     for col in ["name", "height_cm", "weight_kg", "nationality", "description", "debut_year"]:
         if col not in df.columns:
-            df[col] = pd.NA
+            if col == "debut_year":
+                df[col] = pd.Series(dtype="Int64")
+            elif col in ["height_cm", "weight_kg"]:
+                df[col] = pd.Series(dtype="float64")
+            else:
+                df[col] = pd.Series(dtype="object")
+
+    # Si hay valores nulos en debut_year, rellenamos con un año válido por defecto para que pase la validación Pandera de enteros estrictos o lo dejamos como Int64 con nulos
+    if "debut_year" in df.columns:
+        # Puesto que Pandera valida debut_year con Check si no es nulo, pero si es null/NA y es entero, Pandera requiere tipo Int64 de pandas.
+        df["debut_year"] = df["debut_year"].astype("Int64")
 
     return df[
         ["name", "height_cm", "weight_kg", "nationality", "description", "debut_year"]

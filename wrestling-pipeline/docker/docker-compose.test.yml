@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test_db
+    volumes:
+      - db_test_data:/var/lib/postgresql/data
+    networks:
+      - test_net
+
+  etl-runner:
+    build:
+      context: ../etl
+      dockerfile: Dockerfile.etl
+    environment:
+      DATABASE_URL: "postgresql://test:test@db:5432/test_db"
+    depends_on:
+      - db
+    command: ["sleep", "infinity"]
+    volumes:
+      - ../tests:/app/tests
+      - ../etl:/app/etl
+    networks:
+      - test_net
+
+volumes:
+  db_test_data:
+
+networks:
+  test_net:
+    external: true
+    name: ${TEST_NET_NAME}
+

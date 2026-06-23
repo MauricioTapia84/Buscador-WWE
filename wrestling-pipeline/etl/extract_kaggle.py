@@ -1,3 +1,24 @@
+import os
+import pandas as pd
+
+def read_kaggle_tables(raw_folder: str = "data/raw") -> dict:
+    """Read common Kaggle CSVs if present in `raw_folder` and return a dict of DataFrames.
+    This is a best-effort loader and will not raise if files are absent."""
+    res = {}
+    paths = {
+        "matches": os.path.join(raw_folder, "matches.csv"),
+        "titles": os.path.join(raw_folder, "titles.csv"),
+        "wrestlers": os.path.join(raw_folder, "wrestlers.csv"),
+    }
+    for k, p in paths.items():
+        if os.path.exists(p):
+            try:
+                res[k] = pd.read_csv(p)
+            except Exception:
+                res[k] = pd.DataFrame()
+        else:
+            res[k] = pd.DataFrame()
+    return res
 
 import sqlite3
 import pandas as pd

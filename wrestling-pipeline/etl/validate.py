@@ -58,7 +58,7 @@ def validate_wrestlers(df: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
             "weight_kg": Column(pa.Float, nullable=True),
             "nationality": Column(pa.String, nullable=True),
             "description": Column(pa.String, nullable=True),
-            "debut_year": Column(pa.Int, Check(lambda v: (v > 1800) & (v <= 2100)), nullable=True),
+            "debut_year": Column(pa.Float, Check(lambda v: (v > 1800) & (v <= 2100)), nullable=True),
         },
         coerce=True,
     )

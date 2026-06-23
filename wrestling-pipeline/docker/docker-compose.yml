@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile.api
     ports:
       - "8000:8000"
+    volumes:
+      - ../data:/app/data
     depends_on:
       - db
     env_file:
@@ -30,9 +32,12 @@ services:
     build:
       context: ../etl
       dockerfile: Dockerfile.etl
+    volumes:
+      - ../data:/app/data
     depends_on:
       - db
     restart: 'no'
 
 volumes:
   db_data:
+

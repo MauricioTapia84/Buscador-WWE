@@ -1,3 +1,22 @@
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+def extract_from_wikipedia_urls(urls: list) -> pd.DataFrame:
+    """Scrape basic biography paragraphs from given Wikipedia (or HTML) URLs.
+    Returns DataFrame with columns: url, text_snippet"""
+    rows = []
+    for u in urls or []:
+        try:
+            r = requests.get(u, timeout=10)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            p = soup.find("p")
+            text = p.get_text().strip() if p else ""
+            rows.append({"url": u, "text_snippet": text})
+        except Exception:
+            rows.append({"url": u, "text_snippet": ""})
+    return pd.DataFrame(rows)
 """ETL: extracción desde Wikipedia (simple implementación usando la API de Wikipedia)."""
 import logging
 import requests
