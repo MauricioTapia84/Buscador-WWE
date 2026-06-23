@@ -10,6 +10,17 @@ root = APIRouter()
 
 @root.get("/wrestlers")
 def list_wrestlers():
+    """Return wrestlers from processed CSV if available, otherwise fall back to minimal static examples."""
+    import os
+    import pandas as pd
+
+    p = os.path.join("data", "processed", "wrestlers_extracted.csv")
+    if os.path.exists(p):
+        try:
+            df = pd.read_csv(p)
+            return df.to_dict(orient="records")
+        except Exception:
+            pass
     return [
         {"id": 1, "name": "John Example", "weight_class": "Heavy"},
         {"id": 2, "name": "Jane Demo", "weight_class": "Light"},
@@ -18,6 +29,17 @@ def list_wrestlers():
 
 @root.get("/titles")
 def list_titles():
+    """Return titles from processed CSV if available, otherwise fall back to static examples."""
+    import os
+    import pandas as pd
+
+    p = os.path.join("data", "processed", "titles_extracted.csv")
+    if os.path.exists(p):
+        try:
+            df = pd.read_csv(p)
+            return df.to_dict(orient="records")
+        except Exception:
+            pass
     return [
         {"id": 1, "name": "World Championship", "holder": "John Example"},
         {"id": 2, "name": "Tag Team Championship", "holder": "Team Demo"},

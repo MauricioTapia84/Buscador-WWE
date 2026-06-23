@@ -19,9 +19,8 @@ def test_get_wrestler_mock(monkeypatch):
             "strDescriptionEN": "Example wrestler"
         }]})
 
-    monkeypatch.setattr('etl.retry_utils.requests.get', lambda url, timeout=5: fake_requests_get(url, timeout))
+    monkeypatch.setattr('etl.extract_thesportsdb.requests_get_with_retry', lambda url, timeout=5: fake_requests_get(url, timeout))
 
     res = get_wrestler("John")
     assert res is not None
     assert res["name"] == "John Example"
-***

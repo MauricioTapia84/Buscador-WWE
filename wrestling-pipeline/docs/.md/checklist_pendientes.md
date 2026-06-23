@@ -21,6 +21,23 @@ Checklist generado a partir de la pauta de evaluación y el estado actual del re
  - **Reintentos:** Se añadió `etl/retry_utils.py` y se aplicaron reintentos en llamadas a request, extracción sqlite y carga a BD.
  - **Reportes de calidad:** `validate._write_report` ahora emite JSON, CSV y HTML de los reportes de validación.
 
+## 1.1) Fuentes de datos y datos de ejemplo (status)
+
+- Observación: Actualmente la app contiene 2 luchadores y 2 títulos (datos posiblemente estáticos/de prueba) visibles en la interfaz/dashboard.
+- Objetivo: Reemplazar esos datos estáticos por datos reales combinando las 3 fuentes previstas: TheSportsDB (API REST, imágenes y metadatos), fuentes web HTML (historia y biografías) y el dataset de Kaggle (luchas, títulos adicionales, resultados).
+
+Tareas propuestas:
+
+- [ ] Auditar el código para localizar el origen actual de los datos de ejemplo (frontend/api/static) y confirmar archivos con los 2 luchadores/2 títulos.
+- [ ] Implementar extractor `etl/extract_thesportsdb.py` para obtener luchadores, metadata e imágenes desde TheSportsDB (API REST). (pendiente)
+- [ ] Implementar extractor `etl/extract_wikipedia.py` o mejorar el existente para scrapear páginas HTML con historia y palmarés. (pendiente)
+- [ ] Implementar extractor `etl/extract_kaggle.py` para consumir el dataset local/descargado de Kaggle y unir tablas de luchas y títulos. (pendiente)
+- [ ] Definir y documentar la lógica de fusión/score de entidades (cómo reconciliar nombres/aliases entre fuentes). (pendiente)
+- [ ] Actualizar `dashboards/` y `api/` para consumir la tabla procesada `data/processed/wrestlers.parquet` y `titles.parquet` en vez de datos estáticos. (pendiente)
+- [ ] Añadir pruebas de integración que validen que al ejecutar ETL completo se generen >10 luchadores y >5 títulos (ejemplo de sanity check). (pendiente)
+
+Notas: Puedo preparar los extractores y la lógica de matching; antes de ejecutar cambios destructivos, pediré confirmación para crear PR con los extractores y las dependencias necesarios.
+
 ## 2) Documentación técnica (20%)
 
 - [ ] Generar `swagger.json` / OpenAPI para la `API` en `api/`.
