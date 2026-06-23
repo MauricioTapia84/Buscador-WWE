@@ -5,6 +5,16 @@ import pandas as pd
 import plotly.express as px
 
 from pathlib import Path
+import importlib.util
+
+# Load nav helper via file path to avoid package import issues in Streamlit
+nav_path = Path(__file__).parent / "nav.py"
+spec = importlib.util.spec_from_file_location("dashboards.nav", str(nav_path))
+if spec and spec.loader:
+    nav = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nav)
+else:
+    raise ImportError(f"Could not load nav helper from {nav_path}")
 
 # =====================================
 # CONFIGURACIÓN
@@ -98,41 +108,9 @@ if st.session_state["role"] != "administrador":
     )
 
 # =====================================
-# MENÚ SUPERIOR DINÁMICO
+# SIDEBAR: centralizada en helper
 # =====================================
-col_menu, col_logout = st.columns([5, 1])
-
-with col_menu:
-    if st.session_state["role"] == "administrador":
-        st.markdown(
-            """
-            <div class="top-menu">
-                <a href="/" target="_self">🏠 Dashboard</a>
-                <a href="/fanatico" target="_self">👤 Fanático</a>
-                <a href="/periodista" target="_self">📊 Periodista</a>
-                <a href="/desarrollador" target="_self">💻 Desarrollador</a>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            """
-            <div class="top-menu">
-                <a href="/" target="_self">🏠 Dashboard</a>
-                <a href="/fanatico" target="_self">👤 Fanático</a>
-                <a href="/periodista" target="_self">📊 Periodista</a>
-                <span style='margin-left: 20px; color: #7a8aa3; font-size: 14px;'>👤 Modo Usuario (Ingresa la clave en el buscador para modo Admin)</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-with col_logout:
-    if st.session_state["role"] == "administrador":
-        if st.button("🔴 Salir de Admin", key="logout_btn_app"):
-            st.session_state["role"] = "usuario"
-            st.experimental_rerun()
+nav.render_sidebar()
 
 # =====================================
 # KPIs
@@ -436,3 +414,40 @@ st.divider()
 st.caption(
     "Wrestling Data Explorer © 2026 | ETL + FastAPI + PostgreSQL + Streamlit"
 )
+
+# =====================================
+# DATOS VIA API: wrestlers y matches
+# =====================================
+st.subheader("📚 Datos ETL (API)")
+cols = st.columns(2)
+with cols[0]:
+    st.markdown("**Wrestlers (unificados - API)**")
+    try:
+        resp = requests.get(f"{API_URL}/wrestlers?source=all", timeout=5)
+        if resp.status_code == 200:
+            wdata = resp.json()
+            if wdata:
+                dfw = pd.DataFrame(wdata)
+                st.dataframe(dfw.head(200), use_container_width=True)
+            else:
+                st.info("No hay wrestlers disponibles vía API.")
+        else:
+            st.error(f"API /wrestlers responded {resp.status_code}")
+    except Exception as e:
+        st.error(f"Error consultando API /wrestlers: {e}")
+
+with cols[1]:
+    st.markdown("**Matches (normalizados - API)**")
+    try:
+        resp = requests.get(f"{API_URL}/matches", timeout=5)
+        if resp.status_code == 200:
+            mdata = resp.json()
+            if mdata:
+                dfm = pd.DataFrame(mdata)
+                st.dataframe(dfm.head(200), use_container_width=True)
+            else:
+                st.info("No hay matches disponibles vía API.")
+        else:
+            st.error(f"API /matches responded {resp.status_code}")
+    except Exception as e:
+        st.error(f"Error consultando API /matches: {e}")

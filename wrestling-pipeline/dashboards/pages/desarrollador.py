@@ -37,26 +37,7 @@ if st.session_state["role"] != "administrador":
     st.info("Introduce la contraseña de administrador en la barra de búsqueda para acceder.")
     st.stop()
 
-# Menú superior dinámico para el administrador
-col_menu, col_logout = st.columns([5, 1])
-
-with col_menu:
-    st.markdown(
-        """
-        <div class="top-menu">
-            <a href="/" target="_self">🏠 Dashboard</a>
-            <a href="/fanatico" target="_self">👤 Fanático</a>
-            <a href="/periodista" target="_self">📊 Periodista</a>
-            <a href="/desarrollador" target="_self">💻 Desarrollador</a>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with col_logout:
-    if st.button("🔴 Salir de Admin", key="logout_btn_dev"):
-        st.session_state["role"] = "usuario"
-        st.experimental_rerun()
+# Sidebar is defined centrally in `home.py`; pages should not recreate it.
 
 st.write("")
 

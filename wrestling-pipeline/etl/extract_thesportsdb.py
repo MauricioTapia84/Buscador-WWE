@@ -59,8 +59,15 @@ def extract_all(sample_names: list = None) -> pd.DataFrame:
                 rows.append({
                     "id": p.get("idPlayer") or None,
                     "name": p.get("strPlayer") or n,
-                    "weight_class": p.get("strWeight") or None,
-                    "thumbnail_url": p.get("strThumb") or None,
+                    "real_name": p.get("strRealName") or None,
+                    "promotion": p.get("strTeam") or None,
+                    "height": p.get("strHeight") or None,
+                    "weight": p.get("strWeight") or None,
+                    "date_born": p.get("dateBorn") or None,
+                    "nationality": p.get("strNationality") or None,
+                    "debut": p.get("strDebut") or None,
+                    "retired": p.get("strRetired") or None,
+                    "image_url": p.get("strThumb") or p.get("strRender") or None,
                     "description": p.get("strDescriptionEN") or None,
                     "source": "thesportsdb",
                 })
@@ -97,20 +104,19 @@ def get_wrestler(name):
         "nationality": wrestler.get("strNationality"),
         "description": wrestler.get("strDescriptionEN"),
     }
+def run_and_save(sample_names: list, out_dir: str = "../data/processed"):
+    df = extract_all(sample_names)
+    os.makedirs(out_dir, exist_ok=True)
+    csv_path = os.path.join(out_dir, "wrestlers_thesportsdb.csv")
+    parquet_path = os.path.join(out_dir, "wrestlers_thesportsdb.parquet")
+    try:
+        df.to_csv(csv_path, index=False)
+        df.to_parquet(parquet_path, index=False)
+    except Exception:
+        # fallback: write only csv
+        df.to_csv(csv_path, index=False)
 
 
-
-    if __name__ == "__main__":
-        wrestlers = ["Undertaker", "John Cena", "Roman Reigns"]
-
-        results = []
-
-        for w in wrestlers:
-            data = get_wrestler(w)
-
-            if data:
-                results.append(data)
-
-        out_dir = os.path.join("..", "data", "raw")
-        os.makedirs(out_dir, exist_ok=True)
-        pd.DataFrame(results).to_csv(os.path.join(out_dir, "wrestlers_api.csv"), index=False)
+if __name__ == "__main__":
+    sample = ["The Undertaker", "John Cena", "Roman Reigns", "Seth Rollins", "Cody Rhodes"]
+    run_and_save(sample)
