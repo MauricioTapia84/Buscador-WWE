@@ -10,40 +10,64 @@ root = APIRouter()
 
 @root.get("/wrestlers")
 def list_wrestlers():
-    """Return wrestlers from processed CSV if available, otherwise fall back to minimal static examples."""
+    """Return wrestlers from processed CSV if available, otherwise return empty list."""
     import os
     import pandas as pd
+    import math
 
-    p = os.path.join("data", "processed", "wrestlers_extracted.csv")
+    p = "/app/data/processed/wrestlers_extracted.csv"
     if os.path.exists(p):
         try:
             df = pd.read_csv(p)
-            return df.to_dict(orient="records")
+            records = df.to_dict(orient="records")
+            # Convertir de forma segura todos los NaN de floats a None para compatibilidad JSON
+            cleaned_records = []
+            for r in records:
+                cleaned_r = {}
+                for k, v in r.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        cleaned_r[k] = None
+                    elif pd.isna(v):
+                        cleaned_r[k] = None
+                    else:
+                        cleaned_r[k] = v
+                cleaned_records.append(cleaned_r)
+            return cleaned_records
         except Exception:
             pass
-    return [
-        {"id": 1, "name": "John Example", "weight_class": "Heavy"},
-        {"id": 2, "name": "Jane Demo", "weight_class": "Light"},
-    ]
+    return []
 
 
 @root.get("/titles")
 def list_titles():
-    """Return titles from processed CSV if available, otherwise fall back to static examples."""
+    """Return titles from processed CSV if available, otherwise return empty list."""
     import os
     import pandas as pd
+    import math
 
-    p = os.path.join("data", "processed", "titles_extracted.csv")
+    p = "/app/data/processed/titles_extracted.csv"
     if os.path.exists(p):
         try:
             df = pd.read_csv(p)
-            return df.to_dict(orient="records")
+            # Convertir fechas a strings para compatibilidad JSON
+            if "won_date" in df.columns:
+                df["won_date"] = df["won_date"].astype(str)
+            records = df.to_dict(orient="records")
+            cleaned_records = []
+            for r in records:
+                cleaned_r = {}
+                for k, v in r.items():
+                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                        cleaned_r[k] = None
+                    elif pd.isna(v):
+                        cleaned_r[k] = None
+                    else:
+                        cleaned_r[k] = v
+                cleaned_records.append(cleaned_r)
+            return cleaned_records
         except Exception:
             pass
-    return [
-        {"id": 1, "name": "World Championship", "holder": "John Example"},
-        {"id": 2, "name": "Tag Team Championship", "holder": "Team Demo"},
-    ]
+    return []
 
 
 app.include_router(root)
@@ -53,7 +77,7 @@ app.include_router(root)
 def get_wrestler(wrestler_id: int):
     wrestlers = list_wrestlers()
     for w in wrestlers:
-        if w["id"] == wrestler_id:
+        if w.get("id") == wrestler_id:
             return w
     raise HTTPException(status_code=404, detail="Wrestler not found")
 
@@ -62,19 +86,30 @@ def get_wrestler(wrestler_id: int):
 def get_title(title_id: int):
     titles = list_titles()
     for t in titles:
-        if t["id"] == title_id:
+        if t.get("id") == title_id:
             return t
     raise HTTPException(status_code=404, detail="Title not found")
 
 
 @root.get("/search")
 def search(q: Optional[str] = None):
-    """Search wrestlers and titles by name containing `q` (case-insensitive)."""
+    """Search wrestlers and titles by query string `q` (case-insensitive)."""
     if not q:
         return {"wrestlers": list_wrestlers(), "titles": list_titles()}
     ql = q.lower()
-    ws = [w for w in list_wrestlers() if ql in w["name"].lower()]
-    ts = [t for t in list_titles() if ql in t["name"].lower()]
+    
+    ws = []
+    for w in list_wrestlers():
+        if w.get("name") and ql in str(w["name"]).lower():
+            ws.append(w)
+            
+    ts = []
+    for t in list_titles():
+        # En títulos, la clave puede ser 'title' o 'name'
+        title_name = t.get("title") or t.get("name") or ""
+        if ql in str(title_name).lower():
+            ts.append(t)
+            
     return {"wrestlers": ws, "titles": ts}
 
 

@@ -506,6 +506,49 @@ footer {
     border-radius: 10px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #ef4444;
+/* =========================================
+   MEDIA QUERIES (RESPONSIVIDAD)
+========================================= */
+
+@media (max-width: 1024px) {
+    .hero {
+        flex-direction: column;
+        padding: 30px;
+        gap: 20px;
+    }
+    
+    .hero-right {
+        width: 100%;
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .hero-right {
+        grid-template-columns: 1fr;
+    }
+    
+    .kpis {
+        grid-template-columns: 1fr;
+    }
+    
+    .cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .hero h1 {
+        font-size: 36px;
+    }
+    
+    .hero h2 {
+        font-size: 24px;
+    }
 }
