@@ -1,0 +1,42 @@
+name: ETL Full Run and Upload Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'wrestling-pipeline/**'
+
+jobs:
+  build-and-run-etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build ETL Docker image
+        run: |
+          docker build -t buscador-wwe-etl -f wrestling-pipeline/etl/Dockerfile.etl wrestling-pipeline/etl
+
+      - name: Create data output dir
+        run: mkdir -p etl-output
+
+      - name: Run ETL inside container
+        env:
+          THESPORTSDB_API_KEY: ${{ secrets.THESPORTSDB_API_KEY }}
+        run: |
+          docker run --rm \
+            -e THESPORTSDB_API_KEY \
+            -v ${{ github.workspace }}/etl-output:/app/data/processed \
+            buscador-wwe-etl bash -lc "python run_etl.py --out /app/data/processed || true"
+
+      - name: List produced files
+        run: ls -la etl-output || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: etl-output
+          path: etl-output

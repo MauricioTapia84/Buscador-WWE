@@ -1,0 +1,39 @@
+name: ETL CI with Artifacts
+
+on:
+  push:
+    paths:
+      - 'wrestling-pipeline/**'
+  pull_request:
+    paths:
+      - 'wrestling-pipeline/**'
+
+jobs:
+  etl-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          cd wrestling-pipeline/etl
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest responses
+      - name: Build ETL Docker image
+        run: |
+          cd wrestling-pipeline/etl
+          docker build -t buscador-wwe-etl -f Dockerfile.etl .
+      - name: Run tests inside ETL image
+        run: |
+          docker run --rm buscador-wwe-etl bash -lc "pytest -q"
+      - name: Upload processed artifacts (if any)
+        uses: actions/upload-artifact@v4
+        with:
+          name: etl-processed-data
+          path: wrestling-pipeline/data/processed/**

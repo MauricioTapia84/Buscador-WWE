@@ -23,6 +23,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r wrestling-pipeline/etl/requirements.txt
 
+      - name: Build ETL Docker image
+        run: |
+          cd wrestling-pipeline/etl
+          docker build -t buscador-wwe-etl -f Dockerfile.etl .
+
+      - name: Run tests inside ETL image
+        env:
+          CI: true
+        run: |
+          docker run --rm -v ${{ github.workspace }}/wrestling-pipeline/data:/app/data buscador-wwe-etl bash -lc "pytest -q || (echo 'Tests failed inside container' && exit 1)"
+
       - name: Run ETL tests
         working-directory: wrestling-pipeline
         run: |

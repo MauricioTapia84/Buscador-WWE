@@ -1,7 +1,24 @@
 FROM python:3.11-slim
 WORKDIR /app
+
+# Install build dependencies for wheels (psycopg2, pyarrow) and common tools
+RUN printf '%s\n' \
+	'deb https://deb.debian.org/debian trixie main contrib non-free' \
+	'deb https://deb.debian.org/debian-security trixie-security main contrib non-free' \
+	'deb https://deb.debian.org/debian trixie-updates main contrib non-free' \
+	> /etc/apt/sources.list.d/debian.list \
+	&& apt-get update \
+	 && apt-get install -y --no-install-recommends \
+		 apt-transport-https \
+		 build-essential \
+		 gcc \
+		 libpq-dev \
+		 curl \
+		 ca-certificates \
+	 && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app
 ENV PYTHONUNBUFFERED=1
 CMD ["python", "run_etl.py"]

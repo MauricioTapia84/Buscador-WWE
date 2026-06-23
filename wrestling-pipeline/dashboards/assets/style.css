@@ -308,6 +308,15 @@
     margin-bottom: 32px;
 }
 
+/* Sidebar top label styling (capitalized first letter via Python, here refine appearance) */
+.sidebar-top-label {
+    font-size: 18px;
+    font-weight: 700;
+    color: #e6eef8;
+    margin-bottom: 18px;
+    text-transform: none; /* handled in Python */
+}
+
 .menu {
     display: flex;
     flex-direction: column;
@@ -349,6 +358,20 @@
     font-size: 14px;
     font-weight: 700;
     margin-bottom: 20px;
+}
+
+/* Reduce sidebar button prominence and spacing for role-dependent controls */
+.stSidebar .stButton>button {
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.03);
+    color: #f8fafc;
+}
+.stSidebar .stButton>button:hover {
+    background: rgba(255,255,255,.02);
 }
 
 .hero {

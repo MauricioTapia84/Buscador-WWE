@@ -73,6 +73,14 @@ def main():
     # run validations and emit reports next to output
     reports = validate_and_report(wrestlers_df=df, champions_df=titles_df, out_prefix=os.path.join(out, "validation_report"))
     logger.info("Validation reports written", extra={"reports": reports})
+    # run normalization to produce final processed CSVs/parquets
+    try:
+        from normalize import normalize_wrestlers, normalize_matches
+        normalize_wrestlers(processed_dir=out)
+        normalize_matches(processed_dir=out, raw_dir=raw)
+    except Exception:
+        logger.exception("Normalization failed")
+
     logger.info("ETL finished")
 
 

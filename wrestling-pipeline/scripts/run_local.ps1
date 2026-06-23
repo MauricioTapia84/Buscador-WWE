@@ -5,8 +5,10 @@ $root = Join-Path -Path $PSScriptRoot -ChildPath '..'
 Set-Location $root
 
 Write-Host 'Building and starting services...'
-docker-compose build
-docker-compose up -d
+$composeFile = Join-Path $root 'docker\docker-compose.yml'
+$project = 'wrestling-pipeline'
+docker-compose -p $project -f $composeFile build
+docker-compose -p $project -f $composeFile up -d
 
 Write-Host 'Waiting for API to be healthy...'
 $url = 'http://localhost:8000/api/health'
@@ -21,5 +23,5 @@ while ((Get-Date) -lt $end) {
 }
 
 Write-Host 'Opening dashboard in default browser...'
-Start-Process 'http://localhost:8050'
+Start-Process 'http://localhost:8501'
 Write-Host 'Services started. Use docker-compose logs -f to follow logs.'
