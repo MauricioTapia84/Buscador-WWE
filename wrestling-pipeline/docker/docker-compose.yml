@@ -37,6 +37,9 @@ services:
     depends_on:
       - db
     restart: 'no'
+    environment:
+      - THESPORTSDB_API_KEY=${THESPORTSDB_API_KEY:-3}
+    command: ["python", "/app/run_etl.py"]
 
 volumes:
   db_data:

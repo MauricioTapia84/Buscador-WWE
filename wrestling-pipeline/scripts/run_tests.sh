@@ -35,7 +35,7 @@ if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&
   
   # Desactivamos set -e temporalmente para que el script no muera si pytest falla (código de salida > 0)
   set +e
-  (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml run --rm -e PYTHONPATH=/app etl-runner pytest -v /app/tests/test_etl.py /app/tests/test_extract_thesportsdb.py) > "$TEST_LOG_FILE" 2>&1
+  (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml run --rm -e PYTHONPATH=/app etl-runner pytest -v /app/tests) > "$TEST_LOG_FILE" 2>&1
   TEST_EXIT_CODE=$?
   set -e
 
@@ -70,11 +70,9 @@ if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&
       echo -e "  ${RED}${formatted_line}${NC}"
     done <<< "$FAILED_TESTS"
     echo ""
-    
-    # Mostrar el traceback o detalles del error de pytest
-    echo -e "${RED}${BOLD}Detalles de los errores:${NC}"
-    # Extraer desde la sección de fallas de pytest
-    sed -n '/FAILURES/,/short test summary info/p' "$TEST_LOG_FILE" | grep -v "FAILURES" | grep -v "short test summary info" || true
+    # Mostrar el traceback o detalles del error de pytest completo
+    echo -e "${RED}${BOLD}Detalles completos de pytest:${NC}"
+    cat "$TEST_LOG_FILE" || true
     echo ""
   fi
 

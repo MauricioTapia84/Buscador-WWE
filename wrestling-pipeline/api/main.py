@@ -8,34 +8,58 @@ app = FastAPI(title="WrestlingData API")
 root = APIRouter()
 
 
-@root.get("/wrestlers")
-def list_wrestlers():
-    """Return wrestlers from processed CSV if available, otherwise return empty list."""
+def _read_csv_safe(path: str):
     import os
     import pandas as pd
     import math
 
-    p = "/app/data/processed/wrestlers_extracted.csv"
-    if os.path.exists(p):
-        try:
-            df = pd.read_csv(p)
-            records = df.to_dict(orient="records")
-            # Convertir de forma segura todos los NaN de floats a None para compatibilidad JSON
-            cleaned_records = []
-            for r in records:
-                cleaned_r = {}
-                for k, v in r.items():
-                    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-                        cleaned_r[k] = None
-                    elif pd.isna(v):
-                        cleaned_r[k] = None
-                    else:
-                        cleaned_r[k] = v
-                cleaned_records.append(cleaned_r)
-            return cleaned_records
-        except Exception:
-            pass
-    return []
+    if not os.path.exists(path):
+        return []
+    try:
+        df = pd.read_csv(path)
+        records = df.to_dict(orient="records")
+        cleaned_records = []
+        for r in records:
+            cleaned_r = {}
+            for k, v in r.items():
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    cleaned_r[k] = None
+                elif pd.isna(v):
+                    cleaned_r[k] = None
+                else:
+                    cleaned_r[k] = v
+            cleaned_records.append(cleaned_r)
+        return cleaned_records
+    except Exception:
+        return []
+
+
+@root.get("/wrestlers")
+def list_wrestlers(source: Optional[str] = None):
+    """Return wrestlers from processed CSVs.
+    Optional query param `source` can be: 'thesportsdb', 'wikipedia', or 'all' (default all).
+    """
+    base = "/app/data/processed"
+    results = []
+    sources = []
+    if source:
+        source = source.lower()
+        if source == 'thesportsdb':
+            sources = ["wrestlers_thesportsdb.csv"]
+        elif source == 'wikipedia':
+            sources = ["wrestlers_enriched.csv"]
+        elif source == 'all':
+            sources = ["wrestlers_thesportsdb.csv", "wrestlers_enriched.csv", "wrestlers.csv"]
+        else:
+            sources = [source]
+    else:
+        sources = ["wrestlers.csv", "wrestlers_thesportsdb.csv", "wrestlers_enriched.csv"]
+
+    for s in sources:
+        p = f"{base}/{s}" if not s.startswith('/') else s
+        results.extend(_read_csv_safe(p))
+
+    return results
 
 
 @root.get("/titles")
@@ -120,3 +144,20 @@ def health():
 
 # include router after all route definitions
 app.include_router(root)
+
+
+@root.get("/matches")
+def list_matches():
+    """Return normalized matches from processed CSV if available."""
+    import os
+
+    p = "/app/data/processed/matches_normalized.csv"
+    if os.path.exists(p):
+        return _read_csv_safe(p)
+
+    # fallback: try raw matches file
+    p2 = "/app/data/raw/matches.csv"
+    if os.path.exists(p2):
+        return _read_csv_safe(p2)
+
+    return []

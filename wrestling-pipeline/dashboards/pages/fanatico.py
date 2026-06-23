@@ -44,40 +44,8 @@ if st.session_state["role"] != "administrador":
         unsafe_allow_html=True
     )
 
-# Menú superior dinámico
-col_menu, col_logout = st.columns([5, 1])
-
-with col_menu:
-    if st.session_state["role"] == "administrador":
-        st.markdown(
-            """
-            <div class="top-menu">
-                <a href="/" target="_self">🏠 Dashboard</a>
-                <a href="/fanatico" target="_self">👤 Fanático</a>
-                <a href="/periodista" target="_self">📊 Periodista</a>
-                <a href="/desarrollador" target="_self">💻 Desarrollador</a>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            """
-            <div class="top-menu">
-                <a href="/" target="_self">🏠 Dashboard</a>
-                <a href="/fanatico" target="_self">👤 Fanático</a>
-                <a href="/periodista" target="_self">📊 Periodista</a>
-                <span style='margin-left: 20px; color: #7a8aa3; font-size: 14px;'>👤 Modo Usuario (Ingresa la clave en el buscador para modo Admin)</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-with col_logout:
-    if st.session_state["role"] == "administrador":
-        if st.button("🔴 Salir de Admin", key="logout_btn_fan"):
-            st.session_state["role"] = "usuario"
-            st.experimental_rerun()
+# Sidebar navigation and admin control (replaces top menu)
+# Sidebar is defined centrally in `home.py`; pages should not recreate it.
 
 st.write("")
 

@@ -3,4 +3,6 @@ WORKDIR /app
 COPY ../etl/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY ../etl /app
+# Ensure run_etl.py is executable when invoked directly
+RUN chmod +x /app/run_etl.py || true
 CMD ["python", "main.py"]
