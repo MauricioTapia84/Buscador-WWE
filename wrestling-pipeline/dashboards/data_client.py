@@ -26,7 +26,7 @@ def _request_json(path: str, params: dict[str, Any] | None = None) -> tuple[Any,
     }
 
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=5)
+        response = requests.get(url, params=params, headers=headers, timeout=30)
         response.raise_for_status()
         return response.json(), None
     except requests.RequestException as exc:

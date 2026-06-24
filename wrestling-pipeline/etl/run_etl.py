@@ -98,6 +98,27 @@ def main():
             from etl.transform import clean_wrestlers
         df = clean_wrestlers(source_df)
 
+        target_file = os.path.join(os.path.dirname(__file__), "target_wrestlers.txt")
+        if os.path.exists(target_file):
+            with open(target_file, "r", encoding="utf-8") as f:
+                targets = [line.strip().lower() for line in f if line.strip()]
+            if targets:
+                def _slugify(val):
+                    import re, unicodedata
+                    if not val: return ""
+                    t = str(val).strip()
+                    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii").lower()
+                    return re.sub(r"[^a-z0-9]+", " ", t).strip()
+                
+                target_slugs = set(_slugify(t) for t in targets if _slugify(t))
+                
+                def is_target(name):
+                    return _slugify(name) in target_slugs
+
+                df = df[df["name"].apply(is_target)].copy()
+                logger.info("Filtered wrestlers against target list", extra={"retained": len(df)})
+
+
     csv_path = os.path.join(out, "wrestlers_extracted.csv")
     df.to_csv(csv_path, index=False)
     logger.info("Wrote wrestlers CSV", extra={"path": csv_path})
@@ -126,6 +147,22 @@ def main():
         except ImportError:
             from etl.transform import clean_champions
         titles_df = clean_champions(titles_df)
+
+        if os.path.exists(target_file) and targets:
+            def _slugify(val):
+                import re, unicodedata
+                if not val: return ""
+                t = str(val).strip()
+                t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii").lower()
+                return re.sub(r"[^a-z0-9]+", " ", t).strip()
+            
+            target_slugs = set(_slugify(t) for t in targets if _slugify(t))
+            
+            def is_target(name):
+                return _slugify(name) in target_slugs
+
+            titles_df = titles_df[titles_df["holder"].apply(is_target)].copy()
+            logger.info("Filtered titles against target list", extra={"retained": len(titles_df)})
 
     titles_path = os.path.join(out, "titles_extracted.csv")
     titles_df.to_csv(titles_path, index=False)
