@@ -4,6 +4,12 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 def requests_get_with_retry(url, **kwargs):
     """Perform a GET request with retries for transient network errors."""
+    headers = dict(kwargs.pop("headers", {}) or {})
+    headers.setdefault(
+        "User-Agent",
+        "WrestlingPipeline/1.0 (educational project; contact: local-dev)"
+    )
+    kwargs["headers"] = headers
     resp = requests.get(url, **kwargs)
     resp.raise_for_status()
     return resp

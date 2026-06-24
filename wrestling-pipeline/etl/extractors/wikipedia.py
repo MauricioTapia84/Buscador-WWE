@@ -9,18 +9,28 @@ import re
 import time
 from typing import List
 from urllib.parse import urljoin
+from urllib.parse import quote
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from dateutil import parser
 
-from ..name_utils import clean_name, normalize_name_columns
-from ..utils.retry_utils import requests_get_with_retry
+try:
+    from ..name_utils import clean_name, normalize_name_columns
+    from ..utils.retry_utils import requests_get_with_retry
+except ImportError:
+    from name_utils import clean_name, normalize_name_columns
+    from utils.retry_utils import requests_get_with_retry
 
 BASE = "https://en.wikipedia.org"
 SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 PAGE_HTML_URL = "https://en.wikipedia.org/api/rest_v1/page/html/{page_title}"
+
+
+def _page_token(title: str) -> str:
+    text = clean_name(title).replace(" ", "_")
+    return quote(text, safe="_()'!,.-")
 
 
 def _extract_infobox(soup: BeautifulSoup) -> dict:
@@ -38,14 +48,56 @@ def _extract_infobox(soup: BeautifulSoup) -> dict:
     return info
 
 
+def _infobox_lookup(info: dict, *aliases: str, contains: tuple[str, ...] = ()) -> str | None:
+    for alias in aliases:
+        value = info.get(alias)
+        if value:
+            return value
+    for key, value in info.items():
+        if not value:
+            continue
+        if any(token in key for token in contains):
+            return value
+    return None
+
+
+def _extract_birth_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    iso_match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", value)
+    if iso_match:
+        return iso_match.group(1)
+    human_match = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", value)
+    if human_match:
+        try:
+            return parser.parse(human_match.group(1)).date().isoformat()
+        except Exception:
+            return human_match.group(1)
+    return clean_name(value)
+
+
+def _clean_measurement(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = clean_name(value)
+    cleaned = re.sub(r"\[\s*\d+\s*\]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,;")
+    return cleaned or None
+
+
 def extract_wikipedia_pages(titles: List[str]) -> pd.DataFrame:
     rows = []
     for title in titles or []:
-        url = SUMMARY_URL.format(title=title)
+        page_token = _page_token(title)
+        if not page_token:
+            continue
+        url = SUMMARY_URL.format(title=page_token)
         try:
             response = requests_get_with_retry(url, timeout=5)
             data = response.json()
             page_title = clean_name(data.get("title"))
+            if not page_title:
+                continue
             rows.append(
                 {
                     "title": page_title,
@@ -81,7 +133,7 @@ def extract_from_wikipedia_urls(urls: List[str]) -> pd.DataFrame:
 
 
 def extract_wwe_champions_page(page_title: str = "List_of_WWE_Champions") -> dict[str, pd.DataFrame]:
-    response = requests_get_with_retry(PAGE_HTML_URL.format(page_title=page_title), timeout=15)
+    response = requests_get_with_retry(PAGE_HTML_URL.format(page_title=_page_token(page_title)), timeout=15)
     soup = BeautifulSoup(response.text, "html.parser")
 
     titles = []
@@ -173,10 +225,28 @@ def enrich_wrestlers(wrestlers_df: pd.DataFrame) -> pd.DataFrame:
             soup = BeautifulSoup(response.text, "html.parser")
             info = _extract_infobox(soup)
             item["real_name"] = info.get("real name") or info.get("birth name")
-            item["birth_date"] = info.get("born") or info.get("date of birth")
-            item["height"] = info.get("height")
-            item["weight"] = info.get("weight")
-            item["debut"] = info.get("debut")
+            item["birth_date"] = _extract_birth_date(
+                _infobox_lookup(info, "born", "date of birth", contains=("born",))
+            )
+            item["height"] = _clean_measurement(
+                _infobox_lookup(
+                    info,
+                    "height",
+                    "billed height",
+                    "announced height",
+                    contains=("height",),
+                )
+            )
+            item["weight"] = _clean_measurement(
+                _infobox_lookup(
+                    info,
+                    "weight",
+                    "billed weight",
+                    "announced weight",
+                    contains=("weight",),
+                )
+            )
+            item["debut"] = _clean_measurement(_infobox_lookup(info, "debut", contains=("debut",)))
         except Exception:
             pass
         rows.append(item)
@@ -207,6 +277,50 @@ def enrich_events(events_df: pd.DataFrame) -> pd.DataFrame:
         time.sleep(0.1)
 
     return pd.DataFrame(rows)
+
+
+def enrich_wrestlers_from_titles(titles: List[str]) -> pd.DataFrame:
+    """Build wrestler profiles from Wikipedia page summaries + infobox scraping.
+
+    This is the integration point the ETL needs: given wrestler names, fetch
+    their page summary for biography/extract and then scrape the page infobox
+    for structured fields such as real name, birth date, height and weight.
+    """
+    pages = extract_wikipedia_pages(titles)
+    if pages.empty:
+        return pd.DataFrame(
+            columns=[
+                "name",
+                "title",
+                "extract",
+                "url",
+                "link",
+                "real_name",
+                "birth_date",
+                "height",
+                "weight",
+                "debut",
+                "source",
+                "name_slug",
+                "real_name_slug",
+            ]
+        )
+
+    profile_input = pages[["name", "url"]].rename(columns={"url": "link"})
+    structured = enrich_wrestlers(profile_input)
+    if structured.empty:
+        merged = pages.copy()
+    else:
+        merged = pages.merge(
+            structured.drop(columns=["link"], errors="ignore"),
+            on=[column for column in ["name", "name_slug"] if column in pages.columns and column in structured.columns],
+            how="left",
+        )
+        if "link" not in merged.columns:
+            merged["link"] = pages["url"]
+
+    merged["source"] = "wikipedia"
+    return normalize_name_columns(merged, ["name", "real_name"])
 
 
 def run_and_save(out_raw: str = "../data/raw", out_processed: str = "../data/processed"):

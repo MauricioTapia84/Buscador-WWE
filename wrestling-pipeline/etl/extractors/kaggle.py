@@ -5,8 +5,12 @@ from typing import Optional
 
 import pandas as pd
 
-from ..utils.retry_utils import retry_on_exception
-from ..name_utils import normalize_name_columns
+try:
+    from ..utils.retry_utils import retry_on_exception
+    from ..name_utils import normalize_name_columns
+except ImportError:
+    from utils.retry_utils import retry_on_exception
+    from name_utils import normalize_name_columns
 
 
 def read_kaggle_tables(raw_folder: str = "data/raw") -> dict:

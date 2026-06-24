@@ -53,6 +53,60 @@
 - Las métricas del perfil `Desarrollador / Analista` siguen en `N/D` mientras no exista un dataset real de combates en `wrestling-pipeline/data/raw/matches.csv` o `wrestling-pipeline/data/raw/wwe_matches.sqlite`.
 - Eso ya no es un bug del dashboard ni del join: es ausencia del insumo Kaggle para calcular `wins`, `losses`, `win_rate` y `most_common_match_type`.
 
+### Mejora aplicada al perfil Periodista
+
+- `wrestling-pipeline/api/main.py`
+  - `title_history` ahora incluye más contexto histórico por reinado:
+    - `title_slug`
+    - `event_date`
+    - `location`
+    - `days_recognized`
+    - `era`
+    - `notes`
+    - `overall_reign`
+    - `champion_reign_number`
+    - `previous_champion`
+    - `next_champion`
+    - `defeated_for_title`
+    - `lost_title_to`
+    - `title_lineage_position`
+  - si `end_date` no venía en la fuente, la API la infiere con el inicio del siguiente reinado del mismo campeonato
+- `wrestling-pipeline/dashboards/role_views.py`
+  - la vista `Periodista` ahora muestra:
+    - total de días reconocidos
+    - eras cubiertas
+    - cards por reinado con evento, lugar, rival previo, sucesor y notas
+    - tabla cronológica ampliada con columnas históricas reales
+- `wrestling-pipeline/api/tests/test_api.py`
+  - se añadieron assertions para verificar que `/titles` y `title_history` exponen el enriquecimiento adicional
+
+### Integración aplicada a Wikipedia
+
+- `wrestling-pipeline/etl/extractors/wikipedia.py`
+  - se agregó `enrich_wrestlers_from_titles()` para construir perfiles desde:
+    - resumen de Wikipedia
+    - scraping del infobox de la página
+  - esto permite poblar `extract`, `real_name`, `birth_date`, `height`, `weight` y `debut`
+- `wrestling-pipeline/etl/extract_wikipedia.py`
+  - se exportó el nuevo helper al nivel del ETL principal
+- `wrestling-pipeline/etl/run_etl.py`
+  - el pipeline ahora intenta generar `wrestlers_enriched.csv` automáticamente a partir de los nombres reales del catálogo y de los campeones
+  - el comportamiento puede desactivarse con `ENABLE_WIKIPEDIA_ENRICHMENT=0`
+- `wrestling-pipeline/tests/test_extractors.py`
+  - se agregó un test para asegurar que el enriquecimiento de Wikipedia mezcla correctamente resumen + infobox
+
+### Ajuste adicional de perfiles fanáticos
+
+- `wrestling-pipeline/etl/extractors/wikipedia.py`
+  - el parser del infobox ahora busca variantes reales de Wikipedia como `billed height`, `billed weight` y claves equivalentes
+  - `birth_date` deja de persistirse como bloque textual completo y se reduce a una fecha usable cuando el infobox trae el valor mezclado con nombre y lugar
+  - se limpian notas de referencia como `[1]` en altura y peso antes de guardar el CSV enriquecido
+- `wrestling-pipeline/dashboards/role_views.py`
+  - se quitó `Nombre real` del perfil `Fanático`
+  - la tarjeta analítica ya no muestra un subtítulo vacío entre paréntesis cuando `real_name` no existe
+- `wrestling-pipeline/tests/test_extractors.py`
+  - se agregó cobertura para aliases del infobox de Wikipedia y limpieza de medidas
+
 ## 2026-06-23
 
 ### Diagnóstico inicial
