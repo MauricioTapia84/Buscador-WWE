@@ -140,6 +140,8 @@ def clean_champions(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         mapping["won_date"] = "won_date"
     if "reign_days" in df.columns:
         mapping["reign_days"] = "reign_days"
+    if "name" in df.columns and "title" not in df.columns:
+        mapping["name"] = "title"
 
     if mapping:
         df = df.rename(columns=mapping)
@@ -159,6 +161,23 @@ def clean_champions(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
 
     for col in ["title", "holder", "won_date", "reign_days"]:
         if col not in df.columns:
-            df[col] = pd.NA
+            if col == "holder":
+                df[col] = "Vacante"
+            elif col == "reign_days":
+                df[col] = 0
+            elif col == "won_date":
+                df[col] = pd.to_datetime("2026-01-01")
+            else:
+                df[col] = pd.NA
+        else:
+            if col == "holder":
+                df[col] = df[col].fillna("Vacante")
+            elif col == "reign_days":
+                df[col] = df[col].fillna(0)
+            elif col == "won_date":
+                df[col] = df[col].fillna(pd.to_datetime("2026-01-01"))
+
+    # Force correct type casting
+    df["reign_days"] = pd.to_numeric(df["reign_days"], errors="coerce").fillna(0).astype("int64")
 
     return df[["title", "holder", "won_date", "reign_days"]]

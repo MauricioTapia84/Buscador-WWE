@@ -11,8 +11,8 @@ def test_corrupt_dates_and_variants():
     out = normalize_matches_df(df)
     assert 'winner' in out.columns and 'loser' in out.columns
     # first row date parse ok
-    assert out.iloc[0]['event_date_parse_ok'] is True
+    assert bool(out.iloc[0]['event_date_parse_ok']) is True
     # second row unparseable
-    assert out.iloc[1]['event_date_parse_ok'] is False
+    assert bool(out.iloc[1]['event_date_parse_ok']) is False
     # third row should be dropped (no competitors)
     assert len(out) == 2
