@@ -107,6 +107,57 @@
 - `wrestling-pipeline/tests/test_extractors.py`
   - se agregó cobertura para aliases del infobox de Wikipedia y limpieza de medidas
 
+### Rediseño UI del perfil Periodista
+
+- `wrestling-pipeline/dashboards/role_views.py`
+  - la vista `Periodista` dejó de ser una columna larga y pasó a un layout editorial con:
+    - hero contextual del luchador
+    - fila KPI
+    - tabs `Resumen`, `Cronología`, `Campeonatos` y `Datos`
+    - timeline visual de reinados
+    - tarjetas narrativas por cambio de manos
+    - comparativas por campeonato y por era
+  - el contenido tabular quedó relegado a la pestaña `Datos` para que la lectura principal no se sienta como un dump
+  - se añadieron estilos específicos para badges, cards editoriales y tabs del perfil periodista
+
+### Nueva vista analítica agregada
+
+- `wrestling-pipeline/dashboards/role_views.py`
+  - `Desarrollador / Analista` se convirtió en un laboratorio visual del roster completo
+  - ahora incluye:
+    - filtros por campeonato, era y rango de años
+    - histogramas de altura y peso
+    - scatter `altura vs peso`
+    - boxplots por era o campeonato dominante
+    - comparativas de altura, peso y duración media de reinados
+    - tendencias de campeones por década
+    - perfil individual con freak facts contra el promedio del grupo filtrado
+  - se agregaron parsers locales de `height` y `weight` para convertir medidas textuales a `cm` y `kg` sin tocar API ni ETL
+
+### Refactor visual de la UI analítica
+
+- `wrestling-pipeline/dashboards/home.py`
+  - se refinó la paleta general sobre el fondo beige
+  - el selector de perfil ahora se renderiza visualmente como un control segmentado horizontal mediante CSS
+  - se mejoró la jerarquía visual de inputs, charts y expander con superficies blancas, bordes suaves y sombras ligeras
+- `wrestling-pipeline/dashboards/role_views.py`
+  - `Perfil Desarrollador / Analista` ahora usa título H1 real
+  - las métricas Kaggle dejaron de mostrarse como texto suelto y pasaron a cuatro tarjetas uniformes con iconografía integrada
+  - cuando no hay dato, las tarjetas muestran `--` y el subtítulo `(Dato no disponible)` en vez de `N/D`
+  - la visualización de títulos visibles ahora usa una paleta coherente y una leyenda más legible
+  - se eliminó la tarjeta analítica pequeña del payload y fue reemplazada por una ficha unificada del luchador, inspirada en la vista fanática
+  - el HTML crudo del payload quedó encapsulado dentro de `st.expander("Ver Payload HTML Crudo")`
+
+### Ajustes de accesibilidad y consistencia visual
+
+- `wrestling-pipeline/dashboards/home.py`
+  - el perfil activo del selector horizontal ahora fuerza texto blanco puro sobre el fondo borgoña
+  - la fila de estado `API / Admin / Datos enriquecidos` dejó de usar métricas flotantes y pasó a pequeñas tarjetas blancas con indicador visual de estado
+  - se redujo el espacio vertical entre buscador y selector de perfil para que funcionen como un panel superior más compacto
+- `wrestling-pipeline/dashboards/role_views.py`
+  - la vista `Fanático` dejó de quedar plana sobre el fondo beige y ahora reutiliza la ficha unificada del luchador dentro de una tarjeta blanca consistente con el resto del dashboard
+  - la imagen del luchador dentro de la ficha unificada dejó de renderizarse recortada; ahora se muestra completa con `object-fit: contain`
+
 ## 2026-06-23
 
 ### Diagnóstico inicial
