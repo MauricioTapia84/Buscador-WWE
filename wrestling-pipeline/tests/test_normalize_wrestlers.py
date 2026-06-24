@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from normalize import normalize_wrestlers
+from etl.transform.normalize import normalize_wrestlers
 
 
 def test_normalize_wrestlers_creates_outputs(tmp_path, monkeypatch):

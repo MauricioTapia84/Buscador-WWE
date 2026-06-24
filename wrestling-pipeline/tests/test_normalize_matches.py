@@ -1,5 +1,5 @@
 import pandas as pd
-from extract_kaggle import normalize_matches_df
+from etl.extractors.kaggle import normalize_matches_df
 
 
 def test_normalize_matches_basic():

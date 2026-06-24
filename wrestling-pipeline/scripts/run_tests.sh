@@ -94,15 +94,16 @@ if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&
 else
   echo "Docker/docker-compose not available or compose file missing; running tests locally as fallback."
   python3 -m pip install --upgrade pip
-  if [ -f "$ROOT_DIR/wrestling-pipeline/etl/requirements.txt" ]; then
-    python3 -m pip install -r "$ROOT_DIR/wrestling-pipeline/etl/requirements.txt"
+  if [ -f "$ROOT_DIR/etl/requirements.txt" ]; then
+    python3 -m pip install -r "$ROOT_DIR/etl/requirements.txt"
   fi
   if [ -f "$ROOT_DIR/requirements.txt" ]; then
     python3 -m pip install -r "$ROOT_DIR/requirements.txt" || true
   fi
 
   echo "Running pytest..."
-  python3 -m pytest -v "$ROOT_DIR/wrestling-pipeline/tests"
+  cd "$ROOT_DIR"
+  python3 -m pytest -v "$ROOT_DIR/tests"
 fi
 
 

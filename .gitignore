@@ -1,13 +1,10 @@
 # Environments
 venv/
 .venv/
-IA_Oruga_Portable/venv/
-IA_Oruga_Portable/.venv/
 
 # Python bytecode and caches
 *.py[cod]
 __pycache__/
-IA_Oruga_Portable/**/__pycache__/
 
 # Build and packaging
 *.egg-info/
@@ -17,3 +14,6 @@ IA_Oruga_Portable/**/__pycache__/
 # Temporary files
 *.swp
 *~
+
+github/
+.github/

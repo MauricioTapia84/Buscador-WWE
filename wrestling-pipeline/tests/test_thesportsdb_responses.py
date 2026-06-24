@@ -1,6 +1,6 @@
 import responses
 import json
-from extract_thesportsdb import fetch_wrestlers_by_name, extract_all
+from etl.extractors.thesportsdb import fetch_wrestlers_by_name, extract_all
 
 API_BASE = "https://www.thesportsdb.com/api/v1/json/3"
 
@@ -26,7 +26,7 @@ def test_fetch_empty_then_token_fallback():
 @responses.activate
 def test_extract_all_uses_fetch(monkeypatch):
     # monkeypatch fetch_wrestlers_by_name to simulate network
-    monkeypatch.setattr('extract_thesportsdb.fetch_wrestlers_by_name', lambda n: [{"idPlayer":"99","strPlayer":n}])
+    monkeypatch.setattr('etl.extractors.thesportsdb.fetch_wrestlers_by_name', lambda n: [{"idPlayer":"99","strPlayer":n}])
     df = extract_all(["Alpha"])
     assert not df.empty
     assert df.iloc[0]["name"] == "Alpha"
