@@ -83,6 +83,230 @@ def _format_value(value, fallback="No disponible"):
     return text if text else fallback
 
 
+def _render_analytics_card(wrestler: dict, analytics: dict):
+    title_count = wrestler.get("titles_won") or 0
+    wins = analytics.get("wins", 0)
+    losses = analytics.get("losses", 0)
+    total_matches = analytics.get("total_matches", 0)
+    win_rate = analytics.get("win_rate", 0.0)
+    most_common_match_type = analytics.get("most_common_match_type")
+    source = analytics.get("source") or "N/A"
+    reason = analytics.get("reason") or "Sin información adicional"
+    years_active = analytics.get("active_years") or analytics.get("career_years") or "N/D"
+
+    avatar = wrestler.get("artist_name") or wrestler.get("name") or "WWE"
+    initials = "".join([part[0] for part in str(avatar).split() if part])[:2].upper() or "WW"
+    real_name = wrestler.get("real_name") or "No disponible"
+    height = wrestler.get("height") or "N/D"
+    weight = wrestler.get("weight") or "N/D"
+
+    st.markdown(
+        """
+        <style>
+        .result-card {
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(15, 23, 42, 0.16);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 24px;
+            color: #0f172a;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        }
+        .result-card-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .wrestler-info {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+        }
+        .avatar-placeholder {
+            width: 72px;
+            height: 72px;
+            border-radius: 22px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #ef4444, #7f1d1d);
+            color: #fff;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .wrestler-name {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+        .wrestler-name small {
+            display: block;
+            color: #475569;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+        .wrestler-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            color: #475569;
+            font-size: 14px;
+        }
+        .badge-title {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #0f172a;
+            font-weight: 700;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .result-card-body {
+            display: grid;
+            gap: 24px;
+            grid-template-columns: 1.4fr 1fr;
+        }
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+        .stats-grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .stat-chip {
+            padding: 16px;
+            border-radius: 18px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .stat-chip .number {
+            font-size: 24px;
+            font-weight: 800;
+            display: block;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+        .stat-chip .label {
+            font-size: 13px;
+            color: #475569;
+        }
+        .notice-box {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .result-list {
+            display: grid;
+            gap: 12px;
+        }
+        .result-item {
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: #fff;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+        }
+        .result-item strong {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #0f172a;
+        }
+        .result-item span {
+            color: #475569;
+            font-size: 13px;
+        }
+        @media (max-width: 900px) {
+            .result-card-body {
+                grid-template-columns: 1fr;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div class="result-card">
+            <div class="result-card-header">
+                <div class="wrestler-info">
+                    <div class="avatar-placeholder">{initials}</div>
+                    <div>
+                        <div class="wrestler-name">
+                            {wrestler.get('artist_name') or wrestler.get('name') or 'Sin nombre'}
+                            <small>({_format_value(real_name)})</small>
+                        </div>
+                        <div class="wrestler-meta">
+                            <span>📏 {height}</span>
+                            <span>⚖️ {weight}</span>
+                            <span>🏛️ WWE</span>
+                            <span>📅 {years_active}</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <span class="badge-title">🏆 {title_count}× Campeón</span>
+                </div>
+            </div>
+
+            <div class="result-card-body">
+                <div>
+                    <div class="section-title">🏅 Palmarés y logros</div>
+                    <div class="result-list">
+                        <div class="result-item">
+                            <strong>Total de combates</strong>
+                            <span>{total_matches if total_matches else 'N/D'}</span>
+                        </div>
+                        <div class="result-item">
+                            <strong>Victorias</strong>
+                            <span>{wins if wins else 'N/D'}</span>
+                        </div>
+                        <div class="result-item">
+                            <strong>Derrotas</strong>
+                            <span>{losses if losses else 'N/D'}</span>
+                        </div>
+                        <div class="result-item">
+                            <strong>Tipo de combate más común</strong>
+                            <span>{_format_value(most_common_match_type)}</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="section-title">🔥 Contexto de la métrica</div>
+                        <div class="notice-box">
+                            Fuente: {source}<br>
+                            {reason}
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="section-title">📊 Estadísticas clave</div>
+                    <div class="stats-grid">
+                        <div class="stat-chip"><span class="number">{total_matches if total_matches else 'N/D'}</span><span class="label">Combates</span></div>
+                        <div class="stat-chip"><span class="number">{(win_rate * 100):.0f}%</span><span class="label">Win-Rate</span></div>
+                        <div class="stat-chip"><span class="number">{wins if wins else 'N/D'}</span><span class="label">Victorias</span></div>
+                        <div class="stat-chip"><span class="number">{losses if losses else 'N/D'}</span><span class="label">Derrotas</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _pick_wrestler(search_term: str, wrestlers: list[dict], label: str):
     filtered, error = _search_results(search_term, wrestlers)
     options = filtered or wrestlers
@@ -129,9 +353,9 @@ def render_fanatico_view(search_term: str, wrestlers: list[dict], titles: list[d
         if image_url:
             st.image(image_url)
         else:
-            placeholder_path = "placeholder.png"
-            if Path(__file__).parents[1].joinpath(placeholder_path).exists():
-                st.image(str(Path(__file__).parents[1].joinpath(placeholder_path)))
+            placeholder_file = Path(__file__).parent.joinpath("placeholder.png")
+            if placeholder_file.exists():
+                st.image(str(placeholder_file))
             else:
                 st.markdown(
                     """
@@ -261,11 +485,4 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
         st.plotly_chart(pie, use_container_width=True)
 
     st.markdown("### Payload analítico")
-    st.json(
-        {
-            "artist_name": wrestler.get("artist_name"),
-            "name_slug": wrestler.get("name_slug"),
-            "analytics": analytics,
-            "titles_won": wrestler.get("titles_won"),
-        }
-    )
+    _render_analytics_card(wrestler, analytics)

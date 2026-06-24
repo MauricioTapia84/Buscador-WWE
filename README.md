@@ -71,3 +71,12 @@ Desde `wrestling-pipeline/`:
 
 - Si necesitas ver los logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
 - El dashboard consume datos reales desde la API y no inventa información.
+
+
+Modo administrador
+
+Para habilitar el perfil de desarrollador / analista, ingresa esta clave en el buscador:
+
+```text
+K#9vLp$2mQx@7nRf!4Zd
+```
