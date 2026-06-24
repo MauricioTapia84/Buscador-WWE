@@ -40,12 +40,12 @@ chown "$(id -u):$(id -g)" "$DATA_DIR" || true
 echo "Running ETL extractors inside existing etl-runner container..."
 ETL_CMD="python -u /app/run_etl.py --verbose"
 if $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" ps | grep etl-runner | grep Up >/dev/null 2>&1; then
-  $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" exec -T etl-runner bash -lc "$ETL_CMD" || echo "ETL extractor failed (see logs)"
+  $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" exec -T etl-runner sh -lc "$ETL_CMD" || echo "ETL extractor failed (see logs)"
 else
   echo "etl-runner not running; starting the service and retrying"
   $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" up -d etl-runner || true
   sleep 2
-  $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" exec -T etl-runner bash -lc "$ETL_CMD" || echo "ETL extractor failed (see logs)"
+  $DC_CMD -p "$PROJECT_NAME" -f "$DOCKER_COMPOSE_FILE" exec -T etl-runner sh -lc "$ETL_CMD" || echo "ETL extractor failed (see logs)"
 fi
 
 echo "Waiting for API to be healthy..."

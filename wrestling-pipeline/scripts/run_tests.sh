@@ -6,8 +6,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "Using project root: $ROOT_DIR"
 DOCKER_COMPOSE_TEST_FILE="$ROOT_DIR/docker/docker-compose.test.yml"
 
-if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1 && [ -f "$DOCKER_COMPOSE_TEST_FILE" ]; then
-  echo "Detected Docker and docker-compose; running tests inside isolated compose 'etl-runner' container."
+if command -v docker >/dev/null 2>&1 && [ -f "$DOCKER_COMPOSE_TEST_FILE" ]; then
+  if command -v docker compose >/dev/null 2>&1; then
+    DC_CMD='docker compose'
+  elif command -v docker-compose >/dev/null 2>&1; then
+    DC_CMD='docker-compose'
+  else
+    DC_CMD=''
+  fi
+  if [ -n "$DC_CMD" ]; then
+    echo "Detected Docker and compose tool; running tests inside isolated compose 'etl-runner' container."
+  fi
   
   # Use an isolated project name with timestamp to avoid colliding networks/containers
   TEST_PROJECT_NAME="wrestling_pipeline_test_$(date +%s)"
@@ -20,22 +29,22 @@ if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&
   # Registrar trap de limpieza automática para asegurar que se destruyan los recursos al salir (éxito o error)
   cleanup() {
     echo "Cleaning up Docker resources for project $TEST_PROJECT_NAME..."
-    (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml down -v --remove-orphans) || true
+    (cd "$ROOT_DIR/docker" && $DC_CMD -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml down -v --remove-orphans) || true
     echo "Removing isolated network: $TEST_NET_NAME"
     docker network rm "$TEST_NET_NAME" 2>/dev/null || true
   }
   trap cleanup EXIT
 
   # Build test images and start services in the test compose network
-  (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml build etl-runner)
-  (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml up -d db)
+  (cd "$ROOT_DIR/docker" && $DC_CMD -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml build etl-runner)
+  (cd "$ROOT_DIR/docker" && $DC_CMD -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml up -d db)
   
   # Ejecutar pytest guardando la salida para formatearla posteriormente. Quitamos el flag -q para obtener la información de cada test individual.
   TEST_LOG_FILE=$(mktemp)
   
   # Desactivamos set -e temporalmente para que el script no muera si pytest falla (código de salida > 0)
   set +e
-  (cd "$ROOT_DIR/docker" && docker-compose -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml run --rm -e PYTHONPATH=/app etl-runner pytest -v /app/tests) > "$TEST_LOG_FILE" 2>&1
+  (cd "$ROOT_DIR/docker" && $DC_CMD -p "$TEST_PROJECT_NAME" -f docker-compose.test.yml run --rm -e PYTHONPATH=/app etl-runner pytest -v /app/tests) > "$TEST_LOG_FILE" 2>&1
   TEST_EXIT_CODE=$?
   set -e
 
