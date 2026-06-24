@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -125,16 +127,20 @@ def render_fanatico_view(search_term: str, wrestlers: list[dict], titles: list[d
     with left:
         image_url = wrestler.get("image_url") or wrestler.get("image_large") or wrestler.get("image_path")
         if image_url:
-            st.image(image_url, use_container_width=True)
+            st.image(image_url)
         else:
-            st.markdown(
-                """
-                <div style="height:320px;border-radius:18px;background:linear-gradient(135deg,#1f2937,#7f1d1d);display:flex;align-items:center;justify-content:center;color:#fef2f2;font-size:28px;font-weight:700;">
-                    WWE
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            placeholder_path = "placeholder.png"
+            if Path(__file__).parents[1].joinpath(placeholder_path).exists():
+                st.image(str(Path(__file__).parents[1].joinpath(placeholder_path)))
+            else:
+                st.markdown(
+                    """
+                    <div style="height:320px;border-radius:18px;background:linear-gradient(135deg,#1f2937,#7f1d1d);display:flex;align-items:center;justify-content:center;color:#fef2f2;font-size:28px;font-weight:700;">
+                        WWE
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     with right:
         st.markdown(f"## {_format_value(wrestler.get('artist_name') or wrestler.get('name'))}")

@@ -25,6 +25,24 @@
     padding: 0 !important;
 }
 
+/* Ocultar la barra lateral completa de Streamlit */
+[data-testid="stSidebar"],
+[data-testid="stSidebarNav"],
+[data-testid="stSidebar"] * {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Asegurar que el contenido principal use todo el ancho cuando no hay sidebar */
+.css-1outpf7, .css-1lcbmhc, [data-testid="stAppViewContainer"] {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+}
+
 /* =========================================
    SIDEBAR
 ========================================= */

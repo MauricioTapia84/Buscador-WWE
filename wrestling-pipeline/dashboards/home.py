@@ -27,6 +27,25 @@ st.markdown(
             radial-gradient(circle at top left, rgba(185, 28, 28, 0.15), transparent 28%),
             linear-gradient(135deg, #f8f4ec 0%, #eadfce 100%);
     }
+    .stApp a.header-anchor,
+    .stApp [data-testid="stHeaderActionElements"],
+    .stApp [data-testid="StyledLinkIconContainer"],
+    .stApp a[href^="#"],
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarNav"],
+    [data-testid="stSidebar"] * {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .css-1outpf7, .css-1lcbmhc, [data-testid="stAppViewContainer"] {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
     .hero-shell {
         padding: 1.8rem;
         border-radius: 24px;
