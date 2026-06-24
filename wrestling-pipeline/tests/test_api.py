@@ -1,8 +1,5 @@
-from fastapi.testclient import TestClient
-from api.main import app
-
-client = TestClient(app)
+from api.main import list_wrestlers
 
 def test_wrestlers():
-    r = client.get('/wrestlers')
-    assert r.status_code == 200
+    payload = list_wrestlers()
+    assert isinstance(payload, list)

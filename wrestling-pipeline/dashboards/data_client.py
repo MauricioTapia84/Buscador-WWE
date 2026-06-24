@@ -1,14 +1,21 @@
 import os
 from typing import Any
+from pathlib import Path
 
 import requests
 import streamlit as st
 
 DEFAULT_API_URL = "http://localhost:8000"
+DOCKER_API_URL = "http://api:8000"
 
 
 def get_api_url() -> str:
-    return os.getenv("API_URL", DEFAULT_API_URL).rstrip("/")
+    configured = os.getenv("API_URL")
+    if configured:
+        return configured.rstrip("/")
+    if Path("/.dockerenv").exists():
+        return DOCKER_API_URL
+    return DEFAULT_API_URL
 
 
 def _request_json(path: str, params: dict[str, Any] | None = None) -> tuple[Any, str | None]:
@@ -58,4 +65,3 @@ def search_catalog(term: str) -> tuple[dict[str, Any] | None, str | None]:
     if isinstance(data, dict):
         return data, None
     return None, error
-

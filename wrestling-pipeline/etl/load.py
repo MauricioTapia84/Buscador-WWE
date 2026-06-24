@@ -2,7 +2,10 @@
 import sqlite3
 import pandas as pd
 from typing import Optional
-from retry_utils import retry_on_exception
+try:
+    from retry_utils import retry_on_exception
+except ImportError:
+    from etl.retry_utils import retry_on_exception
 
 
 @retry_on_exception(attempts=3)

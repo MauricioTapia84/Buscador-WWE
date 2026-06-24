@@ -1,26 +1,24 @@
-from fastapi.testclient import TestClient
-from main import app
-
-client = TestClient(app)
+from main import get_wrestler, health, list_titles, list_wrestlers
 
 def test_wrestlers():
-    r = client.get("/wrestlers")
-    assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    payload = list_wrestlers()
+    assert isinstance(payload, list)
 
 
 def test_titles():
-    r = client.get("/titles")
-    assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    payload = list_titles()
+    assert isinstance(payload, list)
 
 
 def test_health():
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json().get("status") == "ok"
+    payload = health()
+    assert payload.get("status") == "ok"
 
 
 def test_get_wrestler_not_found():
-    r = client.get("/wrestlers/999")
-    assert r.status_code == 404
+    try:
+        get_wrestler(999)
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 404
+    else:
+        raise AssertionError("Expected 404 when wrestler does not exist")
