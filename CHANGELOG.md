@@ -1,5 +1,58 @@
 # CHANGELOG
 
+## 2026-06-24
+
+### Correcciones aplicadas
+
+- `wrestling-pipeline/etl/run_etl.py`
+  - se corrigió el import roto que impedía ejecutar el ETL
+  - el fallback de nombres ahora usa campeones históricos + nombres WWE curados
+  - se persiste `wrestlers_thesportsdb.csv` antes de la limpieza para no perder campos ricos
+- `wrestling-pipeline/etl/transform.py`
+  - `clean_wrestlers()` ya no reduce la entidad a solo `name`, `height_cm`, `weight_kg`, `nationality`, `description`, `debut_year`
+  - ahora preserva `real_name`, `birth_date`, `date_born`, `height`, `weight`, `image_url`, `image_large`, `promotion`, `team`, `source` y columnas auxiliares necesarias para el dashboard
+- `wrestling-pipeline/etl/extract_thesportsdb.py`
+  - se añadió selección estricta del mejor luchador por búsqueda
+  - se eliminó el comportamiento que aceptaba candidatos incorrectos como `Benedikt Rocker`, `John Stones`, `Kevin Theophile-Catherine` o `André André`
+  - el extractor ahora reutiliza el caché local del repositorio antes de salir a red
+  - si el caché por clave quedó contaminado con un match malo, ahora se invalida al no superar la validación estricta
+  - se corrigió el crash del logger cuando TheSportsDB respondía `429` o fallaba la conexión
+- `wrestling-pipeline/api/main.py`
+  - la API ahora combina varias fuentes de catálogo de luchadores y vuelve a deduplicar por `name_slug`
+  - esto la hace más robusta si `wrestlers.csv` quedó incompleto pero existe un `wrestlers_thesportsdb.csv` más rico
+- `wrestling-pipeline/dashboards/role_views.py`
+  - la selección por defecto prioriza perfiles con imagen y datos visibles antes que placeholders vacíos
+  - la vista fanática usa también `image_path` como fallback visual
+
+### Validación ejecutada
+
+- Tests locales ejecutados:
+  - `wrestling-pipeline/tests/test_api.py`
+  - `wrestling-pipeline/tests/test_etl.py`
+  - `wrestling-pipeline/tests/test_extract_thesportsdb.py`
+- Stack levantado con Docker mediante `wrestling-pipeline/scripts/run_local.sh`
+- ETL reejecutado dentro de Docker con el contenedor `etl-runner`
+- Verificaciones reales:
+  - `http://localhost:8000/health`
+  - `http://localhost:8000/wrestlers`
+  - `http://localhost:8000/titles`
+  - `http://localhost:8501/`
+
+### Estado final comprobado
+
+- `/wrestlers` ya no devuelve catálogo vacío ni perfiles obviamente incorrectos.
+- El dashboard tiene de nuevo fichas con imagen para luchadores como `The Undertaker`, `Triple H`, `John Cena`, `Roman Reigns`, `Seth Rollins`, `Cody Rhodes`, `Hulk Hogan` y otros.
+- `/titles` entrega 12 reinados enriquecidos y varios campeones históricos quedaron enlazados correctamente a imagen y fecha de nacimiento cuando TheSportsDB tenía ficha.
+- Los perfiles que no existen en TheSportsDB siguen entrando como entidad mínima desde la cronología de títulos.
+  - Ejemplo: `The Iron Sheik` y `Andre the Giant` aparecen con `title_history`, aunque sin foto si la fuente rica no respondió o no existe en caché.
+- `analytics` ya no llega como `{}`.
+  - Cuando falta el dataset de combates, la API devuelve una estructura completa con `data_available=false` y una razón explícita.
+
+### Límite que sigue vigente
+
+- Las métricas del perfil `Desarrollador / Analista` siguen en `N/D` mientras no exista un dataset real de combates en `wrestling-pipeline/data/raw/matches.csv` o `wrestling-pipeline/data/raw/wwe_matches.sqlite`.
+- Eso ya no es un bug del dashboard ni del join: es ausencia del insumo Kaggle para calcular `wins`, `losses`, `win_rate` y `most_common_match_type`.
+
 ## 2026-06-23
 
 ### Diagnóstico inicial

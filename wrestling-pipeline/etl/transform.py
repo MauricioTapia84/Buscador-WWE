@@ -51,7 +51,7 @@ def clean_wrestlers(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     if "debut_year" in df.columns:
         df["debut_year"] = pd.to_numeric(df["debut_year"], errors="coerce").astype("Int64")
 
-    df = df.drop_duplicates(subset=[c for c in ["name"] if c in df.columns])
+    df = df.drop_duplicates(subset=[c for c in ["name"] if c in df.columns]).copy()
 
     if "birth_date" not in df.columns and "date_born" in df.columns:
         df["birth_date"] = df["date_born"]
