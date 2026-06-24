@@ -13,8 +13,10 @@ except Exception:  # pragma: no cover
 
 try:
     from name_utils import clean_name, normalize_name_columns, slugify_name, first_non_empty
+    from roster_targets import is_target_name, load_target_slugs
 except ImportError:
     from etl.name_utils import clean_name, normalize_name_columns, slugify_name, first_non_empty
+    from etl.roster_targets import is_target_name, load_target_slugs
 
 
 LOGGER = logging.getLogger("etl.normalize")
@@ -28,6 +30,13 @@ def _read_csv_if_exists(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame()
     return pd.read_csv(path)
+
+
+def _target_slugs(processed_dir: str | None = None) -> set[str]:
+    target_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "target_wrestlers.txt")
+    if os.path.exists(target_file):
+        return load_target_slugs(target_file)
+    return load_target_slugs()
 
 
 def _fuzzy_group_key(name: str, existing: list[str], score_cutoff: int) -> str | None:
@@ -66,6 +75,9 @@ def normalize_wrestlers(processed_dir="data/processed"):
     df = pd.concat(frames, ignore_index=True, sort=False)
     df = normalize_name_columns(df, ["name", "real_name"])
     df = df[df["name_slug"].astype(str).str.len() > 0].copy()
+    target_slugs = _target_slugs(processed_dir)
+    if target_slugs:
+        df = df[df["name"].apply(lambda value: is_target_name(value, target_slugs))].copy()
 
     score_cutoff = int(os.getenv("WRESTLER_DEDUPE_SCORE", "88"))
     groups: dict[str, list[int]] = {}
@@ -153,6 +165,11 @@ def normalize_matches(processed_dir="data/processed", raw_dir="data/raw"):
     }
     df = df.rename(columns={src: dst for src, dst in rename_map.items() if src in df.columns and dst not in df.columns})
     df = normalize_name_columns(df, ["winner", "loser"])
+    target_slugs = _target_slugs(processed_dir)
+    if target_slugs and not df.empty:
+        winner_mask = df["winner"].apply(lambda value: is_target_name(value, target_slugs)) if "winner" in df.columns else pd.Series(False, index=df.index)
+        loser_mask = df["loser"].apply(lambda value: is_target_name(value, target_slugs)) if "loser" in df.columns else pd.Series(False, index=df.index)
+        df = df[winner_mask | loser_mask].copy()
 
     for column in [col for col in df.columns if "date" in col.lower()]:
         try:
@@ -187,8 +204,12 @@ def normalize_titles(processed_dir="data/processed", raw_dir="data/raw"):
     processed_titles = _read_csv_if_exists(os.path.join(processed_dir, "titles_extracted.csv"))
     raw_reigns = _read_csv_if_exists(os.path.join(raw_dir, "reigns.csv"))
     raw_champion_history = _read_csv_if_exists(os.path.join(raw_dir, "wwe_champions_initial.csv"))
+    raw_matches = _read_csv_if_exists(os.path.join(raw_dir, "matches.csv"))
+    raw_kaggle_titles = _read_csv_if_exists(os.path.join(raw_dir, "titles.csv"))
+    raw_wrestlers = _read_csv_if_exists(os.path.join(raw_dir, "wrestlers.csv"))
 
     frames = []
+    target_slugs = _target_slugs(processed_dir)
 
     if not raw_reigns.empty:
         frame = raw_reigns.copy()
@@ -222,6 +243,67 @@ def normalize_titles(processed_dir="data/processed", raw_dir="data/raw"):
         titles["start_date"] = titles.get("won_date")
         frames.append(titles)
 
+    if not raw_matches.empty and not raw_kaggle_titles.empty and not raw_wrestlers.empty:
+        matches = raw_matches.copy()
+        if "title_change" in matches.columns:
+            title_change = pd.to_numeric(matches["title_change"], errors="coerce").fillna(0)
+            matches = matches[title_change == 1].copy()
+        else:
+            matches = pd.DataFrame()
+
+        if not matches.empty:
+            titles_lookup = raw_kaggle_titles.rename(columns={"id": "title_id", "name": "title"})
+            wrestlers_lookup = raw_wrestlers.rename(columns={"id": "winner_id", "name": "holder"})
+            matches = matches.merge(titles_lookup[["title_id", "title"]], on="title_id", how="left")
+            matches = matches.merge(wrestlers_lookup[["winner_id", "holder"]], on="winner_id", how="left")
+            matches = matches.dropna(subset=["title", "holder"]).copy()
+
+            if not matches.empty:
+                matches["title"] = matches["title"].astype(str).str.strip()
+                matches["holder"] = matches["holder"].astype(str).str.strip()
+                matches = matches[(matches["title"] != "") & (matches["holder"] != "")]
+
+                if not matches.empty:
+                    matches["champion_name"] = matches["holder"]
+                    matches["event_name"] = matches.get("event_name")
+                    if "event_name" not in matches.columns or matches["event_name"].isna().all():
+                        matches["event_name"] = matches.get("card_id").map(
+                            lambda value: f"Card #{int(value)}" if pd.notna(value) else None
+                        )
+                    matches["notes"] = "Reconstruido desde Kaggle matches.csv (title_change=1)"
+                    matches["reign_days"] = pd.NA
+                    matches["days_recognized"] = pd.NA
+                    matches["won_date"] = pd.NaT
+                    matches["start_date"] = pd.NaT
+                    matches["overall_reign"] = pd.NA
+                    matches["champion_reign_number"] = pd.NA
+                    if "card_id" in matches.columns:
+                        matches["source_order"] = pd.to_numeric(matches["card_id"], errors="coerce")
+                    elif "id" in matches.columns:
+                        matches["source_order"] = pd.to_numeric(matches["id"], errors="coerce")
+                    else:
+                        matches["source_order"] = pd.NA
+
+                    kaggle_reigns = matches[
+                        [
+                            column
+                            for column in [
+                                "title",
+                                "holder",
+                                "champion_name",
+                                "won_date",
+                                "start_date",
+                                "reign_days",
+                                "days_recognized",
+                                "event_name",
+                                "notes",
+                                "source_order",
+                            ]
+                            if column in matches.columns
+                        ]
+                    ].copy()
+                    frames.append(kaggle_reigns)
+
     out_csv = os.path.join(processed_dir, "titles.csv")
     out_parquet = os.path.join(processed_dir, "titles.parquet")
 
@@ -231,6 +313,8 @@ def normalize_titles(processed_dir="data/processed", raw_dir="data/raw"):
 
     df = pd.concat(frames, ignore_index=True, sort=False)
     df = normalize_name_columns(df, ["holder", "champion_name"])
+    if target_slugs and not df.empty:
+        df = df[df["holder"].apply(lambda value: is_target_name(value, target_slugs))].copy()
 
     if "title" not in df.columns and "name" in df.columns:
         df["title"] = df["name"]
@@ -241,10 +325,16 @@ def normalize_titles(processed_dir="data/processed", raw_dir="data/raw"):
 
     if "reign_days" in df.columns:
         df["reign_days"] = pd.to_numeric(df["reign_days"], errors="coerce")
+    if "days_recognized" in df.columns:
+        df["days_recognized"] = pd.to_numeric(df["days_recognized"], errors="coerce")
 
-    dedupe_columns = [column for column in ["title", "holder_slug", "won_date", "event_name"] if column in df.columns]
+    dedupe_columns = [column for column in ["title", "holder_slug", "won_date", "event_name", "source_order"] if column in df.columns]
     if dedupe_columns:
         df = df.drop_duplicates(subset=dedupe_columns)
+
+    sort_columns = [column for column in ["title", "won_date", "start_date", "source_order"] if column in df.columns]
+    if sort_columns:
+        df = df.sort_values(sort_columns, na_position="last").reset_index(drop=True)
 
     df.to_csv(out_csv, index=False)
     try:

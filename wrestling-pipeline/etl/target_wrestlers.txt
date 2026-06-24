@@ -9,7 +9,6 @@ Triple H
 Randy Savage
 Ric Flair
 Andre the Giant
-André the Giant
 Randy Orton
 Kurt Angle
 Rey Mysterio
@@ -36,13 +35,12 @@ Chyna
 Booker T
 Big Show
 Kevin Nash
-Diesel
 Yokozuna
 Razor Ramon
 Mr. Perfect
 Owen Hart
 Jake Roberts
-Billy Graham
+Superstar Billy Graham
 Ricky Steamboat
 Sgt. Slaughter
 Ted DiBiase
@@ -55,12 +53,5 @@ Ivan Koloff
 Pedro Morales
 Stan Stasiak
 Bob Backlund
-Kévin Théophile-Catherine
 Cody Rhodes
 The Iron Sheik
-Steve Austin
-Bret Hart
-Randy Savage
-Jake Roberts
-Andre The Giant
-Roddy Piper

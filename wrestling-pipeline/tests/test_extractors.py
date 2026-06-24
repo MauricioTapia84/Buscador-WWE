@@ -9,7 +9,9 @@ from etl.extractors.wikipedia import (
     _extract_birth_date,
     _extract_infobox,
     _infobox_lookup,
+    _is_ambiguous_summary,
     enrich_wrestlers_from_titles,
+    extract_wikipedia_pages,
 )
 
 
@@ -90,3 +92,45 @@ def test_wikipedia_infobox_aliases_handle_billed_height_weight_and_born():
     assert _extract_birth_date(_infobox_lookup(info, "born", contains=("born",))) == "1963-08-11"
     assert _clean_measurement(_infobox_lookup(info, "height", "billed height", contains=("height",))) == "6 ft 7 in"
     assert _clean_measurement(_infobox_lookup(info, "weight", "billed weight", contains=("weight",))) == "302 lb"
+
+
+def test_extract_wikipedia_pages_preserves_requested_name_and_skips_ambiguous(monkeypatch):
+    payloads = {
+        "https://en.wikipedia.org/api/rest_v1/page/summary/The_Rock": {
+            "title": "The Rock",
+            "extract": "The Rock most often refers to: Dwayne Johnson ...",
+            "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/The_Rock"}},
+        },
+        "https://en.wikipedia.org/api/rest_v1/page/summary/Dwayne_Johnson": {
+            "title": "Dwayne Johnson",
+            "extract": "Dwayne Johnson is an American actor and professional wrestler.",
+            "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/Dwayne_Johnson"}},
+        },
+        "https://en.wikipedia.org/api/rest_v1/page/summary/Bryan_Danielson": {
+            "title": "Bryan Danielson",
+            "extract": "Bryan Danielson is an American professional wrestler.",
+            "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/Bryan_Danielson"}},
+        },
+    }
+
+    class DummyResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    monkeypatch.setattr(
+        "etl.extractors.wikipedia.requests_get_with_retry",
+        lambda url, timeout=5: DummyResponse(payloads[url]),
+    )
+
+    df = extract_wikipedia_pages(["The Rock", "Daniel Bryan"])
+    assert not df.empty
+    rock = df[df["name"] == "The Rock"].iloc[0].to_dict()
+    daniel = df[df["name"] == "Daniel Bryan"].iloc[0].to_dict()
+    assert rock["title"] == "Dwayne Johnson"
+    assert rock["name_slug"] == "the rock"
+    assert daniel["title"] == "Bryan Danielson"
+    assert daniel["name_slug"] == "daniel bryan"
+    assert _is_ambiguous_summary("The Rock", "The Rock most often refers to: Dwayne Johnson")

@@ -7,12 +7,14 @@ try:
     from extract_thesportsdb import extract_all as extract_thesportsdb
     from extract_wikipedia import extract_from_wikipedia_urls, enrich_wrestlers_from_titles
     from extract_kaggle import read_kaggle_tables
+    from roster_targets import is_target_name, load_target_slugs
 except ImportError:
     from etl.utils.logging_config import configure_logging
     from etl.validate import validate_and_report
     from etl.extract_thesportsdb import extract_all as extract_thesportsdb
     from etl.extract_wikipedia import extract_from_wikipedia_urls, enrich_wrestlers_from_titles
     from etl.extract_kaggle import read_kaggle_tables
+    from etl.roster_targets import is_target_name, load_target_slugs
 
 
 def _seed_wrestler_names(raw_dir: str) -> list[str]:
@@ -66,6 +68,8 @@ def main():
     out = os.getenv("ETL_OUTPUT", "data/processed")
     raw = os.getenv("DATA_RAW", "data/raw")
     os.makedirs(out, exist_ok=True)
+    target_file = os.path.join(os.path.dirname(__file__), "target_wrestlers.txt")
+    target_slugs = load_target_slugs(target_file)
 
     # Prefer existing raw CSV if provided
     raw_wrestlers_path = os.path.join(raw, "wrestlers_api.csv")
@@ -98,25 +102,9 @@ def main():
             from etl.transform import clean_wrestlers
         df = clean_wrestlers(source_df)
 
-        target_file = os.path.join(os.path.dirname(__file__), "target_wrestlers.txt")
-        if os.path.exists(target_file):
-            with open(target_file, "r", encoding="utf-8") as f:
-                targets = [line.strip().lower() for line in f if line.strip()]
-            if targets:
-                def _slugify(val):
-                    import re, unicodedata
-                    if not val: return ""
-                    t = str(val).strip()
-                    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii").lower()
-                    return re.sub(r"[^a-z0-9]+", " ", t).strip()
-                
-                target_slugs = set(_slugify(t) for t in targets if _slugify(t))
-                
-                def is_target(name):
-                    return _slugify(name) in target_slugs
-
-                df = df[df["name"].apply(is_target)].copy()
-                logger.info("Filtered wrestlers against target list", extra={"retained": len(df)})
+        if target_slugs:
+            df = df[df["name"].apply(lambda value: is_target_name(value, target_slugs))].copy()
+            logger.info("Filtered wrestlers against target list", extra={"retained": len(df)})
 
 
     csv_path = os.path.join(out, "wrestlers_extracted.csv")
@@ -148,20 +136,8 @@ def main():
             from etl.transform import clean_champions
         titles_df = clean_champions(titles_df)
 
-        if os.path.exists(target_file) and targets:
-            def _slugify(val):
-                import re, unicodedata
-                if not val: return ""
-                t = str(val).strip()
-                t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii").lower()
-                return re.sub(r"[^a-z0-9]+", " ", t).strip()
-            
-            target_slugs = set(_slugify(t) for t in targets if _slugify(t))
-            
-            def is_target(name):
-                return _slugify(name) in target_slugs
-
-            titles_df = titles_df[titles_df["holder"].apply(is_target)].copy()
+        if target_slugs:
+            titles_df = titles_df[titles_df["holder"].apply(lambda value: is_target_name(value, target_slugs))].copy()
             logger.info("Filtered titles against target list", extra={"retained": len(titles_df)})
 
     titles_path = os.path.join(out, "titles_extracted.csv")

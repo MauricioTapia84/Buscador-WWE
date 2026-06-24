@@ -158,6 +158,28 @@
   - la vista `Fanático` dejó de quedar plana sobre el fondo beige y ahora reutiliza la ficha unificada del luchador dentro de una tarjeta blanca consistente con el resto del dashboard
   - la imagen del luchador dentro de la ficha unificada dejó de renderizarse recortada; ahora se muestra completa con `object-fit: contain`
 
+### Corrección del enriquecimiento Wikipedia
+
+- `wrestling-pipeline/etl/extractors/wikipedia.py`
+  - el merge de Wikipedia ya no depende del título final de la página y conserva el nombre solicitado como clave de unión
+  - se agregaron aliases controlados para nombres ambiguos o redirects frecuentes del wrestling, como `The Rock`, `Buddy Rogers`, `Batista`, `Edge`, `Daniel Bryan` y otros
+  - se rechazan resúmenes ambiguos de Wikipedia antes de consolidarlos para evitar bios incorrectas como páginas de desambiguación
+- `wrestling-pipeline/tests/test_extractors.py`
+  - se agregó cobertura para aliases/redirects y para descarte de summaries ambiguos
+
+### Roster académico curado
+
+- `wrestling-pipeline/etl/target_wrestlers.txt`
+  - se reemplazó la lista anterior por un roster canónico, deduplicado y sin nombres basura
+- `wrestling-pipeline/etl/roster_targets.py`
+  - se centralizó el roster curado, sus aliases permitidos y un blacklist de falsos positivos
+- `wrestling-pipeline/etl/run_etl.py`
+  - el filtrado preliminar de luchadores y títulos ahora usa el helper centralizado en vez de lógica local duplicada
+- `wrestling-pipeline/etl/transform/normalize.py`
+  - `normalize_wrestlers()`, `normalize_matches()` y `normalize_titles()` ahora respetan el roster académico para evitar que el API vuelva a inyectar nombres fuera de la lista
+- `wrestling-pipeline/tests/test_etl.py`
+  - se reforzó la prueba de `normalize_titles()` para asegurar que se excluyan campeones fuera del roster objetivo
+
 ## 2026-06-23
 
 ### Diagnóstico inicial

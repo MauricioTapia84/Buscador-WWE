@@ -27,6 +27,22 @@ BASE = "https://en.wikipedia.org"
 SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 PAGE_HTML_URL = "https://en.wikipedia.org/api/rest_v1/page/html/{page_title}"
 
+WIKIPEDIA_TITLE_ALIASES = {
+    "the rock": ["Dwayne Johnson"],
+    "stone cold steve austin": ["Stone Cold Steve Austin"],
+    "steve austin": ["Stone Cold Steve Austin"],
+    "superstar billy graham": ["Superstar Billy Graham"],
+    "buddy rogers": ["Buddy Rogers (wrestler)"],
+    "diesel": ["Diesel (wrestler)"],
+    "edge": ["Edge (wrestler)"],
+    "lita": ["Lita (wrestler)"],
+    "batista": ["Batista (wrestler)"],
+    "booker t": ["Booker T (wrestler)"],
+    "booker t.": ["Booker T (wrestler)"],
+    "daniel bryan": ["Bryan Danielson"],
+    "razor ramon": ["Scott Hall"],
+}
+
 
 def _page_token(title: str) -> str:
     text = clean_name(title).replace(" ", "_")
@@ -85,29 +101,64 @@ def _clean_measurement(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _title_candidates(title: str) -> list[str]:
+    requested = clean_name(title)
+    if not requested:
+        return []
+    candidates = [requested]
+    for alias in WIKIPEDIA_TITLE_ALIASES.get(requested.lower(), []):
+        alias_clean = clean_name(alias)
+        if alias_clean and alias_clean.lower() not in {item.lower() for item in candidates}:
+            candidates.append(alias_clean)
+    return candidates
+
+
+def _is_ambiguous_summary(page_title: str, extract: str | None) -> bool:
+    title = clean_name(page_title).lower()
+    text = clean_name(extract).lower()
+    if not title:
+        return True
+    ambiguous_markers = [
+        "may refer to",
+        "most often refers to",
+        "may also refer to",
+        "is a nickname for",
+        "commonly refers to",
+    ]
+    if any(marker in text for marker in ambiguous_markers):
+        return True
+    return False
+
+
 def extract_wikipedia_pages(titles: List[str]) -> pd.DataFrame:
     rows = []
     for title in titles or []:
-        page_token = _page_token(title)
-        if not page_token:
+        requested_name = clean_name(title)
+        if not requested_name:
             continue
-        url = SUMMARY_URL.format(title=page_token)
-        try:
-            response = requests_get_with_retry(url, timeout=5)
-            data = response.json()
-            page_title = clean_name(data.get("title"))
-            if not page_title:
+        for candidate in _title_candidates(requested_name):
+            page_token = _page_token(candidate)
+            if not page_token:
                 continue
-            rows.append(
-                {
-                    "title": page_title,
-                    "name": page_title,
-                    "extract": data.get("extract"),
-                    "url": data.get("content_urls", {}).get("desktop", {}).get("page"),
-                }
-            )
-        except Exception:
-            continue
+            url = SUMMARY_URL.format(title=page_token)
+            try:
+                response = requests_get_with_retry(url, timeout=5)
+                data = response.json()
+                page_title = clean_name(data.get("title"))
+                extract = data.get("extract")
+                if not page_title or _is_ambiguous_summary(page_title, extract):
+                    continue
+                rows.append(
+                    {
+                        "title": page_title,
+                        "name": requested_name,
+                        "extract": extract,
+                        "url": data.get("content_urls", {}).get("desktop", {}).get("page"),
+                    }
+                )
+                break
+            except Exception:
+                continue
 
     if not rows:
         return pd.DataFrame(columns=["title", "name", "extract", "url", "name_slug"])

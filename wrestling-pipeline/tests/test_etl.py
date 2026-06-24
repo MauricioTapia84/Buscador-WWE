@@ -3,6 +3,7 @@ import tempfile
 import pandas as pd
 
 from etl.transform import clean_wrestlers, clean_champions
+from etl.transform.normalize import normalize_titles
 from etl.validate import validate_wrestlers, validate_champions
 from etl.load import load_data
 
@@ -48,3 +49,42 @@ def test_load_writes_sqlite_tables(tmp_path):
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='champions'")
     assert cur.fetchone() is not None
     conn.close()
+
+
+def test_normalize_titles_reconstructs_reigns_from_kaggle_matches(tmp_path):
+    raw_dir = tmp_path / "raw"
+    processed_dir = tmp_path / "processed"
+    raw_dir.mkdir()
+    processed_dir.mkdir()
+
+    pd.DataFrame(
+        [
+            {"id": 1, "name": "WWE Championship"},
+            {"id": 2, "name": "World Heavyweight Championship"},
+        ]
+    ).to_csv(raw_dir / "titles.csv", index=False)
+
+    pd.DataFrame(
+        [
+            {"id": 10, "name": "John Cena"},
+            {"id": 11, "name": "Triple H"},
+            {"id": 12, "name": "Random Indy Wrestler"},
+        ]
+    ).to_csv(raw_dir / "wrestlers.csv", index=False)
+
+    pd.DataFrame(
+        [
+            {"id": 100, "card_id": 500, "winner_id": 10, "title_id": 1, "title_change": 1},
+            {"id": 101, "card_id": 501, "winner_id": 11, "title_id": 2, "title_change": 1},
+            {"id": 102, "card_id": 502, "winner_id": 12, "title_id": 1, "title_change": 1},
+            {"id": 103, "card_id": 503, "winner_id": 10, "title_id": 1, "title_change": 0},
+        ]
+    ).to_csv(raw_dir / "matches.csv", index=False)
+
+    normalize_titles(processed_dir=str(processed_dir), raw_dir=str(raw_dir))
+
+    out = pd.read_csv(processed_dir / "titles.csv")
+    assert len(out) == 2
+    assert set(out["holder"]) == {"John Cena", "Triple H"}
+    assert set(out["title"]) == {"WWE Championship", "World Heavyweight Championship"}
+    assert out["event_name"].tolist() == ["Card #500", "Card #501"]
