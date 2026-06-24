@@ -2,17 +2,17 @@ import os
 import pandas as pd
 import logging
 try:
-    from logging_config import configure_logging
+    from utils.logging_config import configure_logging
     from validate import validate_and_report
     from extract_thesportsdb import extract_all as extract_thesportsdb
     from extract_wikipedia import extract_from_wikipedia_urls
-    from extract_kaggle import read_kaggle_tables
+    from extract_kaggle import read_kaggle_tables, extract_all_sqlite
 except ImportError:
-    from etl.logging_config import configure_logging
+    from etl.utils.logging_config import configure_logging
     from etl.validate import validate_and_report
     from etl.extract_thesportsdb import extract_all as extract_thesportsdb
     from etl.extract_wikipedia import extract_from_wikipedia_urls
-    from etl.extract_kaggle import read_kaggle_tables
+    from etl.extract_kaggle import read_kaggle_tables, extract_all_sqlite
 
 
 def _seed_wrestler_names(raw_dir: str) -> list[str]:
@@ -66,6 +66,12 @@ def main():
     out = os.getenv("ETL_OUTPUT", "data/processed")
     raw = os.getenv("DATA_RAW", "data/raw")
     os.makedirs(out, exist_ok=True)
+
+    # Extract any SQLite tables to raw folder before running the rest of the pipeline
+    try:
+        extract_all_sqlite(raw)
+    except Exception as e:
+        logger.warning(f"Kaggle SQLite auto-extraction skipped/failed: {e}")
 
     # Prefer existing raw CSV if provided
     raw_wrestlers_path = os.path.join(raw, "wrestlers_api.csv")
@@ -144,9 +150,9 @@ def main():
     # run normalization to produce final processed CSVs/parquets
     try:
         try:
-            from normalize import normalize_wrestlers, normalize_matches, normalize_titles
+            from transform.normalize import normalize_wrestlers, normalize_matches, normalize_titles
         except ImportError:
-            from etl.normalize import normalize_wrestlers, normalize_matches, normalize_titles
+            from etl.transform.normalize import normalize_wrestlers, normalize_matches, normalize_titles
         normalize_wrestlers(processed_dir=out)
         normalize_matches(processed_dir=out, raw_dir=raw)
         normalize_titles(processed_dir=out, raw_dir=raw)

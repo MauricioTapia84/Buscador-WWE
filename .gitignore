@@ -17,3 +17,7 @@ __pycache__/
 
 github/
 .github/
+
+# SQLite databases
+*.sqlite
+*.db

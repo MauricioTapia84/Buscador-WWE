@@ -1,7 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install build dependencies for wheels (psycopg2, pyarrow) and common tools
 RUN printf '%s\n' \
 	'deb https://deb.debian.org/debian trixie main contrib non-free' \
 	'deb https://deb.debian.org/debian-security trixie-security main contrib non-free' \
@@ -17,9 +16,18 @@ RUN printf '%s\n' \
 		 ca-certificates \
 	 && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install --no-cache-dir -r /app/requirements.txt
-COPY . /app
-RUN ln -s /app /app/etl
-ENV PYTHONUNBUFFERED=1
-CMD ["python", "run_etl.py"]
+COPY etl/requirements.txt /app/requirements_etl.txt
+COPY api/requirements.txt /app/requirements_api.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r /app/requirements_etl.txt && \
+    pip install --no-cache-dir -r /app/requirements_api.txt && \
+    pip install --no-cache-dir pytest pytest-cov
+
+COPY etl /app/etl
+COPY api /app/api
+COPY tests /app/tests
+COPY etl/run_etl.py /app/run_etl.py
+RUN ln -s /app /app/wrestling-pipeline || true
+
+ENV PYTHONPATH=/app
+CMD ["pytest", "-v", "/app/tests"]

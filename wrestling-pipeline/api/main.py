@@ -30,6 +30,45 @@ PROCESSED_DIR = Path(os.getenv("DATA_PROCESSED_DIR", str(DEFAULT_PROCESSED_DIR))
 RAW_DIR = Path(os.getenv("DATA_RAW_DIR", str(DEFAULT_RAW_DIR)))
 
 
+_cached_wrestlers_df = None
+_cached_wrestlers_records = None
+_cached_titles_records = None
+_cached_matches_records = None
+_last_mtimes = {}
+
+
+def _get_processed_files_mtimes() -> dict[str, float]:
+    files = [
+        "wrestlers.csv",
+        "wrestlers_thesportsdb.csv",
+        "wrestlers_enriched.csv",
+        "wrestlers_extracted.csv",
+        "titles.csv",
+        "titles_extracted.csv",
+        "matches.csv",
+        "matches_normalized.csv",
+    ]
+    mtimes = {}
+    for filename in files:
+        path = PROCESSED_DIR / filename
+        if path.exists():
+            mtimes[filename] = os.path.getmtime(path)
+        else:
+            mtimes[filename] = 0.0
+    return mtimes
+
+
+def _check_and_refresh_cache():
+    global _cached_wrestlers_df, _cached_wrestlers_records, _cached_titles_records, _cached_matches_records, _last_mtimes
+    current_mtimes = _get_processed_files_mtimes()
+    if _cached_wrestlers_df is None or current_mtimes != _last_mtimes:
+        _cached_wrestlers_df = None
+        _cached_wrestlers_records = None
+        _cached_titles_records = None
+        _cached_matches_records = None
+        _last_mtimes = current_mtimes
+
+
 def _default_analytics(*, data_available: bool, reason: str | None = None) -> dict:
     return {
         "total_matches": 0,
@@ -85,7 +124,7 @@ def _read_csv(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
     try:
-        return pd.read_csv(path)
+        return pd.read_csv(path, low_memory=False)
     except Exception:
         return pd.DataFrame()
 
@@ -206,27 +245,26 @@ def _serialize_records(df: pd.DataFrame) -> list[dict]:
 
 
 def _load_wrestlers() -> pd.DataFrame:
+    global _cached_wrestlers_df
+    _check_and_refresh_cache()
+    if _cached_wrestlers_df is not None:
+        return _cached_wrestlers_df
+
     base = _read_wrestler_catalog_sources()
     titles = _load_titles()
     matches = _load_matches()
 
     wrestlers = _normalize_wrestlers_frame(base)
     if not wrestlers.empty:
-        wrestler_rows = []
         source_rank = {"thesportsdb": 0, "wikipedia": 1, "catalog": 2, "extracted": 3}
-        for slug, group in wrestlers.groupby("name_slug", dropna=False):
-            if not slug:
-                continue
-            ordered = group.assign(
-                source_rank=group["source"].map(source_rank).fillna(9)
-            ).sort_values("source_rank")
-            merged = {"name_slug": slug}
-            for column in ordered.columns:
-                if column == "source_rank":
-                    continue
-                merged[column] = _first_non_empty(*ordered[column].tolist())
-            wrestler_rows.append(merged)
-        wrestlers = pd.DataFrame(wrestler_rows) if wrestler_rows else pd.DataFrame()
+        wrestlers = wrestlers.copy()
+        for col in wrestlers.columns:
+            if wrestlers[col].dtype == object:
+                wrestlers[col] = wrestlers[col].apply(lambda x: None if (isinstance(x, str) and not x.strip()) else _clean_value(x))
+
+        wrestlers["source_rank"] = wrestlers["source"].map(source_rank).fillna(9)
+        wrestlers = wrestlers.sort_values("source_rank")
+        wrestlers = wrestlers.groupby("name_slug", as_index=False).first()
 
     existing_slugs = set(wrestlers.get("name_slug", pd.Series(dtype="object")).dropna().tolist()) if not wrestlers.empty else set()
 
@@ -275,16 +313,18 @@ def _load_wrestlers() -> pd.DataFrame:
 
         stipulations = {}
         if "match_type" in matches.columns:
-            for slug, group in matches.groupby("winner_slug"):
-                if slug:
-                    most_common = group["match_type"].dropna().astype(str).str.strip()
-                    if not most_common.empty:
-                        stipulations.setdefault(slug, most_common.mode().iloc[0])
-            for slug, group in matches.groupby("loser_slug"):
-                if slug and slug not in stipulations:
-                    most_common = group["match_type"].dropna().astype(str).str.strip()
-                    if not most_common.empty:
-                        stipulations[slug] = most_common.mode().iloc[0]
+            winners_filtered = matches[matches["winner_slug"].notna() & (matches["winner_slug"] != "") & matches["match_type"].notna()]
+            if not winners_filtered.empty:
+                winner_counts = winners_filtered.groupby(["winner_slug", "match_type"]).size().reset_index(name="count")
+                winner_modes = winner_counts.sort_values("count", ascending=False).drop_duplicates("winner_slug")
+                stipulations = dict(zip(winner_modes["winner_slug"], winner_modes["match_type"]))
+
+            losers_filtered = matches[matches["loser_slug"].notna() & (matches["loser_slug"] != "") & matches["match_type"].notna()]
+            if not losers_filtered.empty:
+                loser_counts = losers_filtered.groupby(["loser_slug", "match_type"]).size().reset_index(name="count")
+                loser_modes = loser_counts.sort_values("count", ascending=False).drop_duplicates("loser_slug")
+                for slug, mtype in zip(loser_modes["loser_slug"], loser_modes["match_type"]):
+                    stipulations.setdefault(slug, mtype)
 
         all_slugs = set(wins) | set(losses)
         for slug in all_slugs:
@@ -321,7 +361,8 @@ def _load_wrestlers() -> pd.DataFrame:
         record["analytics"] = stats
         records.append(record)
 
-    return pd.DataFrame(records)
+    _cached_wrestlers_df = pd.DataFrame(records)
+    return _cached_wrestlers_df
 
 
 def _load_titles() -> pd.DataFrame:
@@ -334,32 +375,38 @@ def _load_matches() -> pd.DataFrame:
 
 @router.get("/wrestlers")
 def list_wrestlers(source: Optional[str] = None):
-    wrestlers = _load_wrestlers()
-    if source and not wrestlers.empty and "source" in wrestlers.columns:
-        wrestlers = wrestlers[wrestlers["source"].astype(str).str.lower() == source.lower()]
-    return _serialize_records(wrestlers)
+    global _cached_wrestlers_records
+    _check_and_refresh_cache()
+    if _cached_wrestlers_records is None:
+        wrestlers = _load_wrestlers()
+        _cached_wrestlers_records = _serialize_records(wrestlers)
+
+    records = _cached_wrestlers_records
+    if source:
+        records = [r for r in records if str(r.get("source", "")).lower() == source.lower()]
+    return records
 
 
 @router.get("/titles")
 def list_titles():
-    titles = _normalize_titles_frame(_load_titles())
-    wrestlers = _load_wrestlers()
-    if titles.empty:
-        return []
-
-    if not wrestlers.empty:
-        enrich_columns = [
-            column
-            for column in ["name_slug", "artist_name", "real_name", "image_url", "biography", "height", "weight", "birth_date"]
-            if column in wrestlers.columns
-        ]
-        titles = titles.merge(
-            wrestlers[enrich_columns].rename(columns={"name_slug": "holder_slug"}),
-            on="holder_slug",
-            how="left",
-        )
-
-    return _serialize_records(titles)
+    global _cached_titles_records
+    _check_and_refresh_cache()
+    if _cached_titles_records is None:
+        titles_df = _normalize_titles_frame(_load_titles())
+        wrestlers_df = _load_wrestlers()
+        if not titles_df.empty and not wrestlers_df.empty:
+            enrich_columns = [
+                column
+                for column in ["name_slug", "artist_name", "real_name", "image_url", "biography", "height", "weight", "birth_date"]
+                if column in wrestlers_df.columns
+            ]
+            titles_df = titles_df.merge(
+                wrestlers_df[enrich_columns].rename(columns={"name_slug": "holder_slug"}),
+                on="holder_slug",
+                how="left",
+            )
+        _cached_titles_records = _serialize_records(titles_df)
+    return _cached_titles_records
 
 
 @router.get("/wrestlers/{wrestler_id}")
@@ -407,7 +454,11 @@ def search(q: Optional[str] = None):
 
 @router.get("/matches")
 def list_matches():
-    return _serialize_records(_normalize_matches_frame(_load_matches()))
+    global _cached_matches_records
+    _check_and_refresh_cache()
+    if _cached_matches_records is None:
+        _cached_matches_records = _serialize_records(_normalize_matches_frame(_load_matches()))
+    return _cached_matches_records
 
 
 @router.get("/health")

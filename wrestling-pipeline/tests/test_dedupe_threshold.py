@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 from pathlib import Path
-from etl.normalize import normalize_wrestlers
+from etl.transform.normalize import normalize_wrestlers
 
 
 def write_csv(path, content):
