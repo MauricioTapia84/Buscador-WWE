@@ -869,12 +869,6 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
             <div class="press-subtitle">
                 Cronología editorial de reinados, cambios de manos y contexto histórico. Esta vista prioriza lectura narrativa y secuencia temporal sobre el dump tabular.
             </div>
-            <div class="press-badges">
-                <span class="press-badge">Campeonato dominante: {_format_value(title_focus)}</span>
-                <span class="press-badge">Primer reinado: {_format_value(first_reign)}</span>
-                <span class="press-badge">Último cierre: {_format_value(last_reign)}</span>
-                <span class="press-badge">Eras: {_format_value(', '.join(eras), 'Sin clasificar')}</span>
-            </div>
         </section>
         """,
         unsafe_allow_html=True,
@@ -886,7 +880,7 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
     top_c.metric("Último evento", latest_event)
     top_d.metric("Días reconocidos", total_days)
 
-    summary_tab, chronology_tab, titles_tab, data_tab = st.tabs(["Resumen", "Cronología", "Campeonatos", "Datos"])
+    summary_tab,titles_tab, data_tab = st.tabs(["Resumen", "Campeonatos", "Datos"])
 
     with summary_tab:
         lead_a, lead_b = st.columns([1.15, 0.85])
@@ -942,97 +936,18 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
                     unsafe_allow_html=True,
                 )
 
-    with chronology_tab:
-        st.markdown("### Línea de tiempo")
-        st.markdown(
-            '<div class="section-note">A la izquierda, la distribución temporal de reinados. A la derecha, las fichas narrativas por cambio de manos.</div>',
-            unsafe_allow_html=True,
-        )
-        timeline_left, timeline_right = st.columns([1.2, 0.8])
-        with timeline_left:
-            timeline_chart = history_df.copy()
-            if "start_date" in timeline_chart.columns and timeline_chart["start_date"].notna().any():
-                if "end_date" not in timeline_chart.columns:
-                    timeline_chart["end_date"] = timeline_chart["start_date"]
-                timeline_chart["chart_end"] = timeline_chart["end_date"].where(
-                    timeline_chart["end_date"].notna(),
-                    timeline_chart["start_date"],
-                )
-                timeline_chart["label"] = timeline_chart["title"].fillna("Sin título")
-                fig = px.timeline(
-                    timeline_chart.sort_values("start_date", ascending=False),
-                    x_start="start_date",
-                    x_end="chart_end",
-                    y="label",
-                    color="title" if "title" in timeline_chart.columns else None,
-                    hover_data={
-                        "event_name": True if "event_name" in timeline_chart.columns else False,
-                        "days_recognized": True if "days_recognized" in timeline_chart.columns else False,
-                        "reign_days": True if "reign_days" in timeline_chart.columns else False,
-                        "label": False,
-                    },
-                    title="Duración de reinados",
-                )
-                fig.update_yaxes(autorange="reversed", title="")
-                _plot_layout(fig, height=440)
-                st.plotly_chart(fig, use_container_width=True)
-
-                duration_series = timeline_chart["days_recognized"] if "days_recognized" in timeline_chart.columns else pd.Series(dtype="float64")
-                if duration_series.dropna().empty and "reign_days" in timeline_chart.columns:
-                    duration_series = timeline_chart["reign_days"]
-                duration_df = timeline_chart.assign(duration=duration_series.fillna(0))
-                duration_fig = px.bar(
-                    duration_df.sort_values("duration", ascending=True),
-                    x="duration",
-                    y="label",
-                    orientation="h",
-                    color="duration",
-                    color_continuous_scale=["#fde68a", "#b45309", "#7f1d1d"],
-                    title="Días por reinado",
-                )
-                duration_fig.update_yaxes(title="")
-                _plot_layout(duration_fig, height=360)
-                st.plotly_chart(duration_fig, use_container_width=True)
-        with timeline_right:
-            for idx, reign in enumerate(reign_records):
-                start_date = reign.get("start_date")
-                end_date = reign.get("end_date")
-                period_parts = []
-                if pd.notna(start_date):
-                    period_parts.append(start_date.date().isoformat())
-                if pd.notna(end_date):
-                    period_parts.append(end_date.date().isoformat())
-                period = " a ".join(period_parts) if period_parts else "Fecha no disponible"
-                days_value = reign.get("days_recognized") if reign.get("days_recognized") not in [None, ""] else reign.get("reign_days")
-                st.markdown(
-                    f"""
-                    <div class="timeline-card">
-                        <div class="index">Reinado #{idx + 1}</div>
-                        <div class="title">{_format_value(reign.get("title"))}</div>
-                        <div class="meta">
-                            <strong>Periodo:</strong> {period}<br/>
-                            <strong>Evento:</strong> {_format_value(reign.get("event_name"))}<br/>
-                            <strong>Ubicación:</strong> {_format_value(reign.get("location"))}<br/>
-                            <strong>Venció a:</strong> {_format_value(reign.get("defeated_for_title"))}<br/>
-                            <strong>Lo perdió ante:</strong> {_format_value(reign.get("lost_title_to"))}<br/>
-                            <strong>Era:</strong> {_format_value(reign.get("era"))}<br/>
-                            <strong>Días:</strong> {_format_value(days_value, 'No disponible')}<br/>
-                            <strong>Notas:</strong> {_format_value(reign.get("notes"), "Sin notas adicionales")}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
     with titles_tab:
         st.markdown("### Distribución por campeonato")
         st.markdown(
             '<div class="section-note">Lectura comparativa del peso de cada campeonato dentro del historial visible del luchador.</div>',
             unsafe_allow_html=True,
         )
+        
+        # --- GRÁFICOS ---
         chart_a, chart_b = st.columns(2)
         counts = history_df["title"].fillna("Sin título").value_counts().reset_index()
         counts.columns = ["title", "reigns"]
+        
         with chart_a:
             fig = px.bar(
                 counts.sort_values("reigns", ascending=True),
@@ -1046,6 +961,7 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
             fig.update_yaxes(title="")
             _plot_layout(fig, height=380)
             st.plotly_chart(fig, use_container_width=True)
+        
         with chart_b:
             duration_source = history_df["days_recognized"] if "days_recognized" in history_df.columns else pd.Series(dtype="float64")
             if duration_source.dropna().empty and "reign_days" in history_df.columns:
@@ -1064,6 +980,7 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
             duration_fig.update_yaxes(title="")
             _plot_layout(duration_fig, height=380)
             st.plotly_chart(duration_fig, use_container_width=True)
+        
         if eras:
             era_counts = history_df["era"].fillna("Sin clasificar").value_counts().reset_index()
             era_counts.columns = ["era", "count"]
@@ -1072,6 +989,49 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
             _plot_layout(era_fig, height=320)
             st.plotly_chart(era_fig, use_container_width=True)
 
+        # --- SEPARADOR VISUAL ---
+        st.markdown("---")
+        st.markdown("### 📋 Detalle de reinados")
+        st.markdown(
+            '<div class="section-note">Fichas narrativas de cada cambio de manos: título, oponentes y número de reinado.</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- TABLA DE REINADOS (en lugar de tarjetas) ---
+        # Ordenar reinados (más antiguo primero)
+        sorted_reigns = sorted(
+            reign_records,
+            key=lambda x: (
+                x.get("start_date") if pd.notna(x.get("start_date")) else pd.Timestamp.max
+            ),
+            reverse=False
+        )
+
+    # Construir lista de datos para la tabla
+    table_data = []
+    for idx, reign in enumerate(sorted_reigns):
+        reign_number = idx + 1
+        table_data.append({
+            "N°": reign_number,
+            "Título": _format_value(reign.get("title")),
+            "Venció a": _format_value(reign.get("defeated_for_title")),
+            "Lo perdió ante": _format_value(reign.get("lost_title_to")),
+        })
+
+    # Convertir a DataFrame y mostrar como tabla
+    table_df = pd.DataFrame(table_data)
+    st.dataframe(
+        table_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "N°": st.column_config.NumberColumn("N°", width="small"),
+            "Título": st.column_config.TextColumn("Título", width="medium"),
+            "Venció a": st.column_config.TextColumn("Venció a", width="medium"),
+            "Lo perdió ante": st.column_config.TextColumn("Lo perdió ante", width="medium"),
+        }
+    )    
+                
     with data_tab:
         st.markdown("### Tabla cronológica")
         st.markdown(
@@ -1219,51 +1179,8 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
             '<div class="lab-note">Aquí importa la dispersión general del roster filtrado, no un solo luchador. El objetivo es ver densidad, outliers y agrupamientos físicos.</div>',
             unsafe_allow_html=True,
         )
-        chart_a, chart_b = st.columns(2)
-        with chart_a:
-            height_df = filtered_roster.dropna(subset=["height_cm"])
-            if not height_df.empty:
-                fig = px.histogram(
-                    height_df,
-                    x="height_cm",
-                    nbins=min(12, max(5, len(height_df))),
-                    color_discrete_sequence=["#7b1e2b"],
-                    title="Distribución de altura (cm)",
-                )
-                _plot_layout(fig, height=340)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay suficientes alturas para graficar la distribución.")
-        with chart_b:
-            weight_df = filtered_roster.dropna(subset=["weight_kg"])
-            if not weight_df.empty:
-                fig = px.histogram(
-                    weight_df,
-                    x="weight_kg",
-                    nbins=min(12, max(5, len(weight_df))),
-                    color_discrete_sequence=["#2f855a"],
-                    title="Distribución de peso (kg)",
-                )
-                _plot_layout(fig, height=340)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No hay suficientes pesos para graficar la distribución.")
-
         scatter_df = filtered_roster.dropna(subset=["height_cm", "weight_kg"]).copy()
         if not scatter_df.empty:
-            color_field = "dominant_title" if scatter_df["dominant_title"].nunique() > 1 else "dominant_era"
-            scatter = px.scatter(
-                scatter_df,
-                x="height_cm",
-                y="weight_kg",
-                color=color_field,
-                size="titles_won",
-                hover_name="artist_name",
-                title="Altura vs peso del roster filtrado",
-                color_discrete_sequence=["#7b1e2b", "#243447", "#2f855a", "#b45309", "#8b5e3c"],
-            )
-            _plot_layout(scatter, height=420)
-            st.plotly_chart(scatter, use_container_width=True)
 
             group_field = "dominant_title" if scatter_df["dominant_title"].nunique() > 1 else "dominant_era"
             box_left, box_right = st.columns(2)
@@ -1354,29 +1271,7 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
                 avg_reign_days=("reign_days", "mean"),
                 reigns=("holder", "count"),
             )
-            if len(decade_stats) > 1:
-                trend_a, trend_b = st.columns(2)
-                with trend_a:
-                    height_trend = px.line(
-                        decade_stats,
-                        x="decade",
-                        y="avg_height_cm",
-                        markers=True,
-                        title="Altura media de campeones por década",
-                    )
-                    _plot_layout(height_trend, height=320)
-                    st.plotly_chart(height_trend, use_container_width=True)
-                with trend_b:
-                    weight_trend = px.line(
-                        decade_stats,
-                        x="decade",
-                        y="avg_weight_kg",
-                        markers=True,
-                        title="Peso medio de campeones por década",
-                    )
-                    _plot_layout(weight_trend, height=320)
-                    st.plotly_chart(weight_trend, use_container_width=True)
-
+            
             if merged_titles["title"].nunique() > 1 and merged_titles["decade"].dropna().nunique() > 1:
                 heatmap = (
                     merged_titles.pivot_table(index="title", columns="decade", values="holder", aggfunc="count", fill_value=0)
@@ -1423,63 +1318,6 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
         height_delta = selected_height - avg_height if pd.notna(avg_height) and pd.notna(selected_height) else None
         weight_delta = selected_weight - avg_weight if pd.notna(avg_weight) and pd.notna(selected_weight) else None
         reign_delta = selected_reign_days - (filtered_roster["total_reign_days"].mean() if filtered_roster["total_reign_days"].notna().any() else 0) if selected_reign_days is not None else None
-
-        metric_a, metric_b, metric_c, metric_d = st.columns(4)
-        with metric_a:
-            st.markdown(
-                _metric_card_html(
-                    "Luchas registradas",
-                    total_matches if analytics_available and total_matches else None,
-                    "🥊",
-                    "#243447",
-                    "Kaggle / matches_normalized",
-                ),
-                unsafe_allow_html=True,
-            )
-        with metric_b:
-            st.markdown(
-                _metric_card_html(
-                    "Win-Rate",
-                    f"{win_rate:.2f}%" if analytics_available else None,
-                    "📈",
-                    "#2f855a",
-                    "Porcentaje de victorias",
-                ),
-                unsafe_allow_html=True,
-            )
-        with metric_c:
-            st.markdown(
-                _metric_card_html(
-                    "Victorias",
-                    wins if analytics_available and wins else None,
-                    "🏆",
-                    "#7b1e2b",
-                    "Combates ganados",
-                ),
-                unsafe_allow_html=True,
-            )
-        with metric_d:
-            st.markdown(
-                _metric_card_html(
-                    "Derrotas",
-                    losses if analytics_available and losses else None,
-                    "🛡️",
-                    "#b45309",
-                    "Combates perdidos",
-                ),
-                unsafe_allow_html=True,
-            )
-
-        st.markdown(
-            f"""
-            <div style="background:#ffffff;border:1px solid rgba(36,52,71,0.10);border-radius:18px;padding:16px 18px;margin:16px 0 6px;box-shadow:0 14px 28px rgba(36,52,71,0.05);">
-                <div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px;">Tipo de combate más común</div>
-                <div style="font-size:22px;font-weight:900;color:#243447;">{_format_value(common_type) if analytics_available else '--'}</div>
-                <div style="font-size:12px;color:#64748b;margin-top:4px;">{analytics.get("reason") if not analytics_available and analytics.get("reason") else 'Métrica enriquecida desde el dataset de combates.'}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
         freak_a, freak_b, freak_c = st.columns(3)
         freak_cards = [
@@ -1539,18 +1377,6 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
             )
             _plot_layout(compare_fig, height=320)
             st.plotly_chart(compare_fig, use_container_width=True)
-
-        if analytics_available:
-            chart_data = pd.DataFrame(
-                [
-                    {"metric": "Victorias", "value": wins},
-                    {"metric": "Derrotas", "value": losses},
-                ]
-            )
-            fig = px.bar(chart_data, x="metric", y="value", color="metric", title="Balance competitivo")
-            fig.update_layout(showlegend=False)
-            _plot_layout(fig, height=320)
-            st.plotly_chart(fig, use_container_width=True)
 
         history = pd.DataFrame(wrestler.get("title_history") or [])
         if not history.empty and "title" in history.columns:
