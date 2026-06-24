@@ -3,7 +3,7 @@ import streamlit as st
 from data_client import fetch_titles, fetch_wrestlers
 from role_views import ensure_session_state, hide_native_page_nav, render_periodista_view
 
-st.set_page_config(page_title="WWE Dashboard | Periodista", page_icon="W", layout="wide")
+st.set_page_config(page_title="WWE Dashboard | Periodista", layout="wide")
 ensure_session_state()
 hide_native_page_nav()
 
