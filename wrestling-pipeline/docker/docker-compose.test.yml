@@ -13,16 +13,12 @@ services:
 
   etl-runner:
     build:
-      context: ../etl
-      dockerfile: Dockerfile.etl
+      context: ..
+      dockerfile: docker/Dockerfile.test
     environment:
       DATABASE_URL: "postgresql://test:test@db:5432/test_db"
     depends_on:
       - db
-    command: ["sleep", "infinity"]
-    volumes:
-      - ../tests:/app/tests
-      - ../etl:/app/etl
     networks:
       - test_net
 

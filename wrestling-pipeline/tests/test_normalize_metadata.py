@@ -1,6 +1,6 @@
 import os
 import json
-from etl.normalize import normalize_wrestlers, normalize_matches
+from etl.transform.normalize import normalize_wrestlers, normalize_matches
 
 def test_wrestlers_metadata(tmp_path, monkeypatch):
     proc = tmp_path / 'processed'
