@@ -1,61 +1,92 @@
 # Wrestling Pipeline
 
-Instrucciones rápidas para levantar el stack localmente (Rol B - API + Docker).
+Guía real para levantar el stack local con Docker, ETL, API y dashboard.
 
-Prerequisitos:
-- Docker y docker-compose instalados
-- Copiar el archivo de variables de entorno: crea `.env` en la carpeta `wrestling-pipeline/` con las variables mostradas abajo
+## Prerrequisitos
 
-Ejemplo mínimo de `.env`:
+- Docker instalado
+- `docker compose` disponible
+  - si además tienes `docker-compose`, el script también lo soporta
+- Crear `wrestling-pipeline/.env`
 
+## `.env` mínimo
+
+```env
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=wrestling
-
-Levantar servicios:
-
-```bash
-cd wrestling-pipeline
-docker compose -f docker/docker-compose.yml up --build
+THESPORTSDB_API_KEY=3
 ```
 
-Orquestación oficial (recomendada): usar el script `scripts/run_local.sh` desde `wrestling-pipeline/`.
-Este script realiza:
-- `docker compose build` y `docker compose up -d`
-- Ejecuta la secuencia ETL dentro del contenedor `etl-runner` (TheSportsDB, Kaggle extractor, normalize)
-- Espera la salud de la API y abre el dashboard
-
-Ejecutar orquestación completa:
+## Flujo recomendado
 
 ```bash
 cd wrestling-pipeline
 ./scripts/run_local.sh
 ```
 
-Requisitos y notas:
-- Asegúrate de tener `Docker` y `docker-compose` instalados.
-- Crea un `.env` en `wrestling-pipeline/` con las variables (ej. `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
-- Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
- - Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
-	 Ejemplo (archivo `wrestling-pipeline/.env`):
+Ese script hace esto:
 
+1. baja contenedores anteriores del proyecto,
+2. reconstruye imágenes,
+3. levanta `db`, `api`, `dashboard` y `etl-runner`,
+4. ejecuta el ETL dentro de `etl-runner`,
+5. espera la salud de la API,
+6. deja el dashboard disponible.
+
+## Levantar manualmente
+
+```bash
+cd wrestling-pipeline
+docker compose -f docker/docker-compose.yml up --build -d
 ```
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=wrestling
-THESPORTSDB_API_KEY=3
+
+Luego puedes revisar:
+
+```bash
+docker compose -f docker/docker-compose.yml ps
+docker compose -f docker/docker-compose.yml logs api
+docker compose -f docker/docker-compose.yml logs dashboard
+docker compose -f docker/docker-compose.yml logs etl-runner
 ```
-- Los datos procesados se montan en `wrestling-pipeline/data` y son compartidos entre ETL, API y dashboard.
 
-Probar API:
+## URLs correctas
 
-- Abrir http://localhost:8000/wrestlers
-- Abrir http://localhost:8000/titles
+- Dashboard: http://localhost:8501
+- API health: http://localhost:8000/health
+- API wrestlers: http://localhost:8000/wrestlers
+- API titles: http://localhost:8000/titles
 
-Notas:
-- El servicio `etl-runner` está configurado con `restart: 'no'` para correr una vez y terminar.
-- Si necesitas ver logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
+## Nota importante de red Docker
 
-### Credenciales de Administrador:
-Para activar el modo administrador en la interfaz web, introduce la siguiente contraseña en cualquiera de los buscadores de luchadores:
-`K#9vLp$2mQx@7nRf!4Zd`
+Dentro del contenedor de Streamlit, la API no debe consultarse con `http://localhost:8000`.
+
+La URL correcta dentro de Docker es:
+
+```text
+http://api:8000
+```
+
+Por eso el servicio `dashboard` inyecta:
+
+```env
+API_URL=http://api:8000
+```
+
+## ETL
+
+- `etl-runner` está configurado con `restart: 'no'`
+- su comportamiento esperado es correr una vez y terminar
+- no debe quedarse `Up` indefinidamente para que la app funcione
+
+Los datos procesados quedan compartidos en:
+
+- `wrestling-pipeline/data`
+
+## Modo administrador
+
+Para habilitar el perfil de desarrollador / analista, ingresa esta clave en el buscador:
+
+```text
+K#9vLp$2mQx@7nRf!4Zd
+```

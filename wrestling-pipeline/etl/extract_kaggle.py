@@ -1,5 +1,13 @@
 import os
 import pandas as pd
+import logging
+
+try:
+    from retry_utils import retry_on_exception
+    from name_utils import normalize_name_columns
+except ImportError:
+    from etl.retry_utils import retry_on_exception
+    from etl.name_utils import normalize_name_columns
 
 def read_kaggle_tables(raw_folder: str = "data/raw") -> dict:
     """Read common Kaggle CSVs if present in `raw_folder` and return a dict of DataFrames.
@@ -37,9 +45,6 @@ def read_kaggle_tables(raw_folder: str = "data/raw") -> dict:
     return res
 
 import sqlite3
-import pandas as pd
-import logging
-from retry_utils import retry_on_exception
 import tempfile
 import os
 
@@ -175,6 +180,8 @@ def normalize_matches_df(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.select_dtypes(include=['object']).columns:
         df[col] = df[col].astype(str).str.strip()
 
+    df = normalize_name_columns(df, ["winner", "loser"])
+
     # basic validation: drop rows with no competitors
     if 'winner' in df.columns and 'loser' in df.columns:
         before = len(df)
@@ -191,15 +198,3 @@ def normalize_matches_df(df: pd.DataFrame) -> pd.DataFrame:
             logging.getLogger('etl.extract_kaggle').warning('Unparseable dates found', extra={'count': n_bad})
 
     return df
-
-    # Try to extract events table if present in raw
-    events_out = os.path.join(out_proc, 'events_normalized.csv')
-    try:
-        events = pd.read_csv(os.path.join('..', 'data', 'raw', 'events.csv'))
-        events.rename(columns={
-            'Name': 'event_name',
-            'Date': 'event_date'
-        }, inplace=True)
-        events.to_csv(events_out, index=False)
-    except Exception:
-        pd.DataFrame().to_csv(events_out, index=False)

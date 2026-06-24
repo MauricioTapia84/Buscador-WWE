@@ -1,135 +1,168 @@
+import json
+import logging
 import os
+from datetime import datetime, timezone
+
 import pandas as pd
-from datetime import datetime
-from rapidfuzz import process, fuzz
+
+try:
+    from rapidfuzz import fuzz, process
+except Exception:  # pragma: no cover
+    fuzz = None
+    process = None
+
+try:
+    from name_utils import clean_name, normalize_name_columns, slugify_name, first_non_empty
+except ImportError:
+    from etl.name_utils import clean_name, normalize_name_columns, slugify_name, first_non_empty
 
 
-def _best_match(name, choices, score_cutoff=85):
-    if not name or not choices:
-        return None, 0
-    try:
-        match = process.extractOne(name, choices, scorer=fuzz.WRatio, score_cutoff=score_cutoff)
-    except Exception:
-        return None, 0
-    if match:
-        return match[0], match[1]
-    return None, 0
+LOGGER = logging.getLogger("etl.normalize")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _read_csv_if_exists(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    return pd.read_csv(path)
+
+
+def _fuzzy_group_key(name: str, existing: list[str], score_cutoff: int) -> str | None:
+    if not name or not existing or process is None or fuzz is None:
+        return None
+    match = process.extractOne(name, existing, scorer=fuzz.WRatio, score_cutoff=score_cutoff)
+    if not match:
+        return None
+    return match[0]
 
 
 def normalize_wrestlers(processed_dir="data/processed"):
-    # read sources
-    ts_path = os.path.join(processed_dir, "wrestlers_thesportsdb.csv")
-    wiki_path = os.path.join(processed_dir, "wrestlers_extracted.csv")
+    source_paths = [
+        ("thesportsdb", os.path.join(processed_dir, "wrestlers_thesportsdb.csv")),
+        ("wikipedia", os.path.join(processed_dir, "wrestlers_enriched.csv")),
+        ("catalog", os.path.join(processed_dir, "wrestlers_extracted.csv")),
+    ]
+    frames = []
+    for source_name, path in source_paths:
+        frame = _read_csv_if_exists(path)
+        if frame.empty:
+            continue
+        frame = frame.copy()
+        frame["source"] = frame.get("source", source_name)
+        if "name" not in frame.columns and "title" in frame.columns:
+            frame["name"] = frame["title"]
+        frames.append(frame)
+
     out_csv = os.path.join(processed_dir, "wrestlers.csv")
     out_parquet = os.path.join(processed_dir, "wrestlers.parquet")
-
-    frames = []
-    if os.path.exists(ts_path):
-        frames.append(pd.read_csv(ts_path))
-    if os.path.exists(wiki_path):
-        frames.append(pd.read_csv(wiki_path))
 
     if not frames:
         pd.DataFrame().to_csv(out_csv, index=False)
         return
 
-    df = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    df = pd.concat(frames, ignore_index=True, sort=False)
+    df = normalize_name_columns(df, ["name", "real_name"])
+    df = df[df["name_slug"].astype(str).str.len() > 0].copy()
 
-    # dedupe using rapidfuzz: build choices list
-    names = df['name'].fillna('').astype(str).str.strip().tolist()
-    unique_names = []
-    groups = {}
-    score_cutoff = int(os.getenv('WRESTLER_DEDUPE_SCORE', '88'))
+    score_cutoff = int(os.getenv("WRESTLER_DEDUPE_SCORE", "88"))
+    groups: dict[str, list[int]] = {}
+    canonical_display: dict[str, str] = {}
     merge_count = 0
-    seen_count = 0
-    for i, name in enumerate(names):
-        if not name:
+
+    for idx, row in df.iterrows():
+        key = row.get("name_slug", "")
+        display_name = clean_name(row.get("name"))
+        if not key:
             continue
-        seen_count += 1
-        best, score = _best_match(name, unique_names, score_cutoff=score_cutoff)
-        if best is None:
-            unique_names.append(name)
-            groups[name] = [i]
-        else:
-            merge_count += 1
-            groups[best].append(i)
+
+        matched_key = None
+        if key not in groups:
+            matched_key = _fuzzy_group_key(display_name, list(canonical_display.values()), score_cutoff)
+        if matched_key:
+            for existing_key, existing_display in canonical_display.items():
+                if existing_display == matched_key:
+                    key = existing_key
+                    merge_count += 1
+                    break
+
+        groups.setdefault(key, []).append(idx)
+        canonical_display.setdefault(key, display_name or key)
 
     records = []
-    for canonical, idxs in groups.items():
-        # merge rows for these indexes
-        merged = {}
-        for idx in idxs:
-            row = df.iloc[idx].to_dict()
-            for k, v in row.items():
-                if pd.isna(v) or v == "":
-                    continue
-                if k not in merged or not merged.get(k):
-                    merged[k] = v
-        merged['canonical_name'] = canonical
+    for key, indexes in groups.items():
+        group = df.loc[indexes].copy()
+        group["source_rank"] = group["source"].map({"thesportsdb": 0, "wikipedia": 1, "catalog": 2}).fillna(9)
+        group = group.sort_values(["source_rank"])
+
+        merged = {
+            "canonical_name": canonical_display.get(key) or clean_name(group.iloc[0].get("name")),
+            "name_slug": key,
+        }
+
+        for column in group.columns:
+            if column in {"source_rank"}:
+                continue
+            merged[column] = first_non_empty(*group[column].tolist())
+
+        merged["name"] = first_non_empty(merged.get("canonical_name"), merged.get("name"))
+        merged["biography"] = first_non_empty(merged.get("description"), merged.get("extract"))
         records.append(merged)
 
-    out_df = pd.DataFrame(records)
-    out_df.drop(columns=[c for c in out_df.columns if c.endswith("_key")], inplace=True, errors="ignore")
-
-    # add metadata
-    meta = {
-        'generated_at': datetime.utcnow().isoformat() + 'Z',
-        'source_files': [os.path.basename(p) for p in [ts_path, wiki_path] if os.path.exists(p)],
-        'rows_input': int(len(df)),
-        'unique_before': int(seen_count),
-        'unique_after': int(len(out_df)),
-        'merges_performed': int(merge_count),
-        'score_cutoff': int(score_cutoff)
-    }
+    out_df = pd.DataFrame(records).sort_values(["canonical_name", "name_slug"], na_position="last")
     out_df.to_csv(out_csv, index=False)
     try:
         out_df.to_parquet(out_parquet, index=False)
     except Exception:
         pass
-    # write metadata file
-    try:
-        import json
-        with open(os.path.join(processed_dir, 'wrestlers_metadata.json'), 'w', encoding='utf-8') as f:
-            json.dump(meta, f)
-    except Exception:
-        pass
 
-    # Basic validation of metadata: ensure at least one source file exists
-    try:
-        if not meta['source_files']:
-            logging.getLogger('etl.normalize').warning('No source files found when normalizing wrestlers')
-    except Exception:
-        pass
+    meta = {
+        "generated_at": _utc_now_iso(),
+        "source_files": [os.path.basename(path) for _, path in source_paths if os.path.exists(path)],
+        "rows_input": int(len(df)),
+        "unique_before": int(df["name_slug"].nunique()),
+        "unique_after": int(len(out_df)),
+        "merges_performed": int(merge_count),
+        "score_cutoff": int(score_cutoff),
+    }
+    with open(os.path.join(processed_dir, "wrestlers_metadata.json"), "w", encoding="utf-8") as handle:
+        json.dump(meta, handle)
 
 
 def normalize_matches(processed_dir="data/processed", raw_dir="data/raw"):
-    matches_in = os.path.join(processed_dir, "matches_normalized.csv")
-    if not os.path.exists(matches_in):
-        # try raw
-        alt = os.path.join(raw_dir, "matches.csv")
-        if os.path.exists(alt):
-            df = pd.read_csv(alt)
-        else:
-            pd.DataFrame().to_csv(os.path.join(processed_dir, "matches.csv"), index=False)
-            return
+    processed_path = os.path.join(processed_dir, "matches_normalized.csv")
+    raw_path = os.path.join(raw_dir, "matches.csv")
+
+    if os.path.exists(processed_path):
+        df = pd.read_csv(processed_path)
+    elif os.path.exists(raw_path):
+        df = pd.read_csv(raw_path)
     else:
-        df = pd.read_csv(matches_in)
+        pd.DataFrame().to_csv(os.path.join(processed_dir, "matches.csv"), index=False)
+        return
 
-    # normalize date columns with better heuristics
-    date_cols = [c for c in df.columns if "date" in c.lower()]
-    for col in date_cols:
+    rename_map = {
+        "Winner": "winner",
+        "Loser": "loser",
+        "Event": "event_name",
+        "EventDate": "event_date",
+        "MatchType": "match_type",
+        "TitleOnLine": "title_on_line",
+    }
+    df = df.rename(columns={src: dst for src, dst in rename_map.items() if src in df.columns and dst not in df.columns})
+    df = normalize_name_columns(df, ["winner", "loser"])
+
+    for column in [col for col in df.columns if "date" in col.lower()]:
         try:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
-            # keep timezone-naive date where possible
-            df[col] = df[col].dt.date
+            df[column] = pd.to_datetime(df[column], errors="coerce")
         except Exception:
-            df[col] = pd.NaT
+            df[column] = pd.NaT
 
-    # metadata and validation
     rows_before = len(df)
-    # drop rows with no competitors
-    if 'winner' in df.columns and 'loser' in df.columns:
-        df = df[~(df['winner'].isna() & df['loser'].isna())]
+    if "winner" in df.columns and "loser" in df.columns:
+        df = df[(df["winner_slug"] != "") | (df["loser_slug"] != "")]
     rows_after = len(df)
 
     out_csv = os.path.join(processed_dir, "matches.csv")
@@ -139,102 +172,98 @@ def normalize_matches(processed_dir="data/processed", raw_dir="data/raw"):
         df.to_parquet(out_parquet, index=False)
     except Exception:
         pass
-    # metadata
+
+    meta = {
+        "generated_at": _utc_now_iso(),
+        "rows": int(len(df)),
+        "rows_before_validation": int(rows_before),
+        "rows_after_validation": int(rows_after),
+    }
+    with open(os.path.join(processed_dir, "matches_metadata.json"), "w", encoding="utf-8") as handle:
+        json.dump(meta, handle)
+
+
+def normalize_titles(processed_dir="data/processed", raw_dir="data/raw"):
+    processed_titles = _read_csv_if_exists(os.path.join(processed_dir, "titles_extracted.csv"))
+    raw_reigns = _read_csv_if_exists(os.path.join(raw_dir, "reigns.csv"))
+    raw_champion_history = _read_csv_if_exists(os.path.join(raw_dir, "wwe_champions_initial.csv"))
+
+    frames = []
+
+    if not raw_reigns.empty:
+        frame = raw_reigns.copy()
+        frame = frame.rename(
+            columns={
+                "title_name": "title",
+                "champion_name": "holder",
+                "start_date": "won_date",
+            }
+        )
+        frames.append(frame)
+
+    if not raw_champion_history.empty:
+        history = raw_champion_history.copy()
+        history["title"] = "WWE Championship"
+        history = history.rename(
+            columns={
+                "champion": "holder",
+                "date_won": "won_date",
+                "event": "event_name",
+                "days_held": "reign_days",
+            }
+        )
+        history["start_date"] = history.get("won_date")
+        history["champion_name"] = history.get("holder")
+        frames.append(history)
+
+    if not processed_titles.empty:
+        titles = processed_titles.copy()
+        titles["champion_name"] = titles.get("holder")
+        titles["start_date"] = titles.get("won_date")
+        frames.append(titles)
+
+    out_csv = os.path.join(processed_dir, "titles.csv")
+    out_parquet = os.path.join(processed_dir, "titles.parquet")
+
+    if not frames:
+        pd.DataFrame().to_csv(out_csv, index=False)
+        return
+
+    df = pd.concat(frames, ignore_index=True, sort=False)
+    df = normalize_name_columns(df, ["holder", "champion_name"])
+
+    if "title" not in df.columns and "name" in df.columns:
+        df["title"] = df["name"]
+
+    for column in ["won_date", "start_date", "end_date"]:
+        if column in df.columns:
+            df[column] = pd.to_datetime(df[column], errors="coerce")
+
+    if "reign_days" in df.columns:
+        df["reign_days"] = pd.to_numeric(df["reign_days"], errors="coerce")
+
+    dedupe_columns = [column for column in ["title", "holder_slug", "won_date", "event_name"] if column in df.columns]
+    if dedupe_columns:
+        df = df.drop_duplicates(subset=dedupe_columns)
+
+    df.to_csv(out_csv, index=False)
     try:
-        import json
-        meta = {
-            'generated_at': datetime.utcnow().isoformat() + 'Z',
-            'rows': int(len(df)),
-            'rows_before_validation': int(rows_before),
-            'rows_after_validation': int(rows_after)
-        }
-        with open(os.path.join(processed_dir, 'matches_metadata.json'), 'w', encoding='utf-8') as f:
-            json.dump(meta, f)
+        df.to_parquet(out_parquet, index=False)
     except Exception:
         pass
-
-
-if __name__ == '__main__':
-    normalize_wrestlers()
-    normalize_matches()
-import os
-import pandas as pd
-import unicodedata
-import re
-from difflib import get_close_matches
 
 
 def slug(name: str) -> str:
-    if not isinstance(name, str):
-        return ""
-    s = unicodedata.normalize('NFKD', name)
-    s = s.encode('ascii', 'ignore').decode('ascii')
-    s = s.lower()
-    s = re.sub(r"[^a-z0-9 ]+", "", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    return slugify_name(name)
 
 
 def unify_wrestlers(processed_dir="data/processed", out_dir="data/processed"):
-    # Read sources
-    ts_file = os.path.join(processed_dir, "wrestlers_thesportsdb.csv")
-    wiki_file = os.path.join(processed_dir, "wrestlers_enriched.csv")
-
-    dfs = []
-    if os.path.exists(ts_file):
-        dfs.append(('thesportsdb', pd.read_csv(ts_file).assign(source='thesportsdb')))
-    if os.path.exists(wiki_file):
-        dfs.append(('wikipedia', pd.read_csv(wiki_file).assign(source='wikipedia')))
-
-    if not dfs:
-        return
-
-    all_rows = pd.concat([df for _, df in dfs], ignore_index=True, sort=False)
-    all_rows['slug'] = all_rows['name'].fillna('').apply(slug)
-
-    # Build canonical list by slug matching and fuzzy fallback
-    canonical = {}
-    for idx, row in all_rows.iterrows():
-        s = row['slug']
-        if not s:
-            continue
-        if s in canonical:
-            canonical[s].append(row.to_dict())
-        else:
-            # try fuzzy match
-            keys = list(canonical.keys())
-            match = get_close_matches(s, keys, n=1, cutoff=0.9)
-            if match:
-                canonical[match[0]].append(row.to_dict())
-            else:
-                canonical[s] = [row.to_dict()]
-
-    rows = []
-    for k, members in canonical.items():
-        merged = {}
-        merged['name'] = members[0].get('name')
-        merged['slug'] = k
-        # prefer thesportsdb fields if present
-        for m in members:
-            for field in ['real_name', 'promotion', 'height', 'weight', 'date_born', 'nationality', 'debut', 'retired', 'image_url', 'description']:
-                if field not in merged or not merged.get(field):
-                    merged[field] = m.get(field) or merged.get(field)
-        rows.append(merged)
-
-    out_df = pd.DataFrame(rows)
-    os.makedirs(out_dir, exist_ok=True)
-    out_csv = os.path.join(out_dir, 'wrestlers.csv')
-    out_parquet = os.path.join(out_dir, 'wrestlers.parquet')
-    out_df.to_csv(out_csv, index=False)
-    try:
-        out_df.to_parquet(out_parquet, index=False)
-    except Exception:
-        pass
+    normalize_wrestlers(processed_dir=processed_dir)
 
 
 def main():
     unify_wrestlers()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

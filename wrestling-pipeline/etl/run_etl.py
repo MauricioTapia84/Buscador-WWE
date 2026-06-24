@@ -1,12 +1,61 @@
 import os
 import pandas as pd
 import logging
-from logging_config import configure_logging
-from validate import validate_and_report
+try:
+    from logging_config import configure_logging
+    from validate import validate_and_report
+    from extract_thesportsdb import extract_all as extract_thesportsdb
+    from extract_wikipedia import extract_from_wikipedia_urls
+    from extract_kaggle import read_kaggle_tables
+except ImportError:
+    from etl.logging_config import configure_logging
+    from etl.validate import validate_and_report
+    from etl.extract_thesportsdb import extract_all as extract_thesportsdb
+    from etl.extract_wikipedia import extract_from_wikipedia_urls
+    from etl.extract_kaggle import read_kaggle_tables
 
-from extract_thesportsdb import extract_all as extract_thesportsdb
-from extract_wikipedia import extract_from_wikipedia_urls
-from extract_kaggle import read_kaggle_tables
+
+def _seed_wrestler_names(raw_dir: str) -> list[str]:
+    seeded = []
+
+    champions_path = os.path.join(raw_dir, "wwe_champions_initial.csv")
+    if os.path.exists(champions_path):
+        try:
+            champions = pd.read_csv(champions_path)
+            seeded.extend(champions.get("champion", pd.Series(dtype="object")).dropna().astype(str).tolist())
+        except Exception:
+            pass
+
+    defaults = [
+        "The Undertaker",
+        "John Cena",
+        "Triple H",
+        "The Rock",
+        "Brock Lesnar",
+        "Randy Orton",
+        "Shawn Michaels",
+        "Roman Reigns",
+        "Seth Rollins",
+        "Cody Rhodes",
+        "Hulk Hogan",
+        "The Iron Sheik",
+        "Bob Backlund",
+        "Andre the Giant",
+        "Randy Savage",
+    ]
+    seeded.extend(defaults)
+
+    cleaned = []
+    seen = set()
+    for name in seeded:
+        text = str(name).replace('"', "").strip()
+        if not text:
+            continue
+        if text.lower() in seen:
+            continue
+        seen.add(text.lower())
+        cleaned.append(text)
+    return cleaned
 
 
 def main():
@@ -22,41 +71,60 @@ def main():
     raw_wrestlers_path = os.path.join(raw, "wrestlers_api.csv")
     if os.path.exists(raw_wrestlers_path):
         logger.info("Loading wrestlers from raw CSV", extra={"path": raw_wrestlers_path})
-        df = pd.read_csv(raw_wrestlers_path)
+        source_df = pd.read_csv(raw_wrestlers_path)
     else:
         # Try to load from Kaggle raw files
         kag = read_kaggle_tables(raw_folder=raw)
         if not kag.get("wrestlers", pd.DataFrame()).empty:
-            df = kag["wrestlers"]
+            source_df = kag["wrestlers"]
         else:
-            # Fallback: call TheSportsDB extractor with sample names from env
-            sample = os.getenv("SAMPLE_NAMES", "Undertaker,Cena,Triple,Stone,Rock,Lesnar,Orton,Michaels").split(",")
-            df = extract_thesportsdb([s.strip() for s in sample if s.strip()])
+            # Fallback: call TheSportsDB using real WWE names from title history + curated defaults.
+            env_sample = [s.strip() for s in os.getenv("SAMPLE_NAMES", "").split(",") if s.strip()]
+            sample = env_sample or _seed_wrestler_names(raw)
+            source_df = extract_thesportsdb(sample)
+            if not source_df.empty:
+                rich_path = os.path.join(out, "wrestlers_thesportsdb.csv")
+                source_df.to_csv(rich_path, index=False)
+                logger.info("Wrote rich TheSportsDB wrestlers CSV", extra={"path": rich_path, "rows": len(source_df)})
 
     # Ensure dataframe
-    if df is None or df.empty:
+    if source_df is None or source_df.empty:
         logger.warning("No wrestlers extracted; creating empty frame")
         df = pd.DataFrame(columns=["id", "name"])
     else:
-        from transform import clean_wrestlers
-        df = clean_wrestlers(df)
+        try:
+            from transform import clean_wrestlers
+        except ImportError:
+            from etl.transform import clean_wrestlers
+        df = clean_wrestlers(source_df)
 
     csv_path = os.path.join(out, "wrestlers_extracted.csv")
     df.to_csv(csv_path, index=False)
     logger.info("Wrote wrestlers CSV", extra={"path": csv_path})
 
-    # Titles could come from Kaggle or be inferred; keep minimal for now
+    # Titles should prefer real source data. Use Kaggle titles first, then the
+    # curated raw champion history shipped with the repository.
     kag = read_kaggle_tables(raw_folder=raw)
     titles_df = kag.get("titles", pd.DataFrame())
     if titles_df.empty:
-        # Generar algunos títulos ficticios pero consistentes para que se muestren en el dashboard
-        titles_df = pd.DataFrame([
-            {"title": "WWE Championship", "holder": "John Cena", "won_date": "2017-01-29", "reign_days": 14},
-            {"title": "Universal Championship", "holder": "Roman Reigns", "won_date": "2020-08-30", "reign_days": 1316},
-            {"title": "World Heavyweight Championship", "holder": "Triple H", "won_date": "2002-09-02", "reign_days": 280}
-        ])
+        champions_path = os.path.join(raw, "wwe_champions_initial.csv")
+        if os.path.exists(champions_path):
+            titles_df = pd.read_csv(champions_path).rename(
+                columns={
+                    "champion": "holder",
+                    "date_won": "won_date",
+                    "event": "event_name",
+                    "days_held": "reign_days",
+                }
+            )
+            titles_df["title"] = "WWE Championship"
+        else:
+            titles_df = pd.DataFrame(columns=["title", "holder", "won_date", "reign_days", "event_name"])
     else:
-        from transform import clean_champions
+        try:
+            from transform import clean_champions
+        except ImportError:
+            from etl.transform import clean_champions
         titles_df = clean_champions(titles_df)
 
     titles_path = os.path.join(out, "titles_extracted.csv")
@@ -75,9 +143,13 @@ def main():
     logger.info("Validation reports written", extra={"reports": reports})
     # run normalization to produce final processed CSVs/parquets
     try:
-        from normalize import normalize_wrestlers, normalize_matches
+        try:
+            from normalize import normalize_wrestlers, normalize_matches, normalize_titles
+        except ImportError:
+            from etl.normalize import normalize_wrestlers, normalize_matches, normalize_titles
         normalize_wrestlers(processed_dir=out)
         normalize_matches(processed_dir=out, raw_dir=raw)
+        normalize_titles(processed_dir=out, raw_dir=raw)
     except Exception:
         logger.exception("Normalization failed")
 

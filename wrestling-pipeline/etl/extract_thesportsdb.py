@@ -1,288 +1,468 @@
-import os
-import requests
-import pandas as pd
 import json
-from hashlib import sha1
 import logging
+import os
+import shutil
+import time
+from datetime import datetime
+from hashlib import sha1
+
+import pandas as pd
+import requests
+
 try:
     from rapidfuzz import fuzz, process
     _HAS_RAPIDFUZZ = True
 except Exception:
     _HAS_RAPIDFUZZ = False
-import shutil
-from retry_utils import requests_get_with_retry
+
+try:
+    from retry_utils import requests_get_with_retry
+    from name_utils import clean_name, normalize_name_columns, slugify_name
+except ImportError:
+    from etl.retry_utils import requests_get_with_retry
+    from etl.name_utils import clean_name, normalize_name_columns, slugify_name
 
 API_BASE = "https://www.thesportsdb.com/api/v1/json"
 CACHE_DIR = os.path.join("data", "raw", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
+def _cache_path(key: str) -> str:
+    return os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
+
+
 def _cache_get(key: str):
-    path = os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
-    if os.path.exists(path):
-        import os
-        import requests
-        import pandas as pd
-        import json
-        from hashlib import sha1
-        import logging
-        import shutil
-        import time
-        from datetime import datetime
-        from retry_utils import requests_get_with_retry
-
-        API_BASE = "https://www.thesportsdb.com/api/v1/json"
-        CACHE_DIR = os.path.join("data", "raw", "cache")
-        os.makedirs(CACHE_DIR, exist_ok=True)
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return None
+    path = _cache_path(key)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return None
 
 
-        def _cache_get(key: str):
-            path = os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
-            if os.path.exists(path):
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except Exception:
-                    return None
-            return None
+def _cache_set(key: str, value):
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return
+    path = _cache_path(key)
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(value, handle)
+    except Exception:
+        pass
 
 
-        def _cache_set(key: str, value):
-            path = os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
+def _is_strict_name_match(query: str, candidate: str) -> bool:
+    query_slug = slugify_name(query)
+    candidate_slug = slugify_name(candidate)
+    if not query_slug or not candidate_slug:
+        return False
+    if query_slug == candidate_slug:
+        return True
+
+    query_tokens = {token for token in query_slug.split() if len(token) > 1}
+    candidate_tokens = set(candidate_slug.split())
+    return len(query_tokens) >= 2 and query_tokens.issubset(candidate_tokens)
+
+
+def _search_cached_players(query: str) -> list[dict]:
+    if not os.path.exists(CACHE_DIR):
+        return []
+
+    best_player = None
+    best_score = 0.0
+    for filename in os.listdir(CACHE_DIR):
+        if not filename.endswith(".json"):
+            continue
+        path = os.path.join(CACHE_DIR, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+
+        if not isinstance(payload, list):
+            continue
+
+        for player in payload:
+            if not isinstance(player, dict) or not clean_name(player.get("strPlayer")):
+                continue
+            if not (
+                _is_strict_name_match(query, player.get("strPlayer"))
+                or _is_strict_name_match(query, player.get("strRealName"))
+            ):
+                continue
+            score = _player_match_score(query, player)
+            if score > best_score:
+                best_player = player
+                best_score = score
+
+    if best_player and best_score >= 500:
+        return [best_player]
+    return []
+
+
+def _api_key() -> str:
+    return os.getenv("THESPORTSDB_API_KEY", "3")
+
+
+def fetch_wrestlers_by_name(name_query: str) -> list[dict]:
+    query = clean_name(name_query)
+    if not query:
+        return []
+
+    key = f"searchplayers:{query}"
+    cached = _cache_get(key)
+    if cached is not None:
+        best_cached = _pick_best_player(query, cached)
+        if best_cached:
+            return [best_cached]
+
+    cached_scan = _search_cached_players(query)
+    if cached_scan:
+        _cache_set(key, cached_scan)
+        return cached_scan
+
+    logger = logging.getLogger("etl.extract_thesportsdb")
+    url = f"{API_BASE}/{_api_key()}/searchplayers.php?p={requests.utils.quote(query)}"
+
+    try:
+        response = requests_get_with_retry(url, timeout=10)
+        data = response.json() or {}
+        players = data.get("player") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("fetch failed", extra={"error": str(exc), "query_name": query})
+        players = []
+
+    if not players and " " in query:
+        for token in [part for part in query.split(" ") if part][:2]:
             try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(value, f)
-            except Exception:
-                pass
-
-
-        def fetch_wrestlers_by_name(name_query: str):
-            """Search TheSportsDB for a person by name. Uses a simple file cache to avoid repeated requests.
-            Returns list of dicts (may be empty)."""
-            key = f"searchplayers:{name_query}"
-            cached = _cache_get(key)
-            if cached is not None:
-                return cached
-            api_key = os.getenv("THESPORTSDB_API_KEY", "3")
-            url = f"{API_BASE}/{api_key}/searchplayers.php?p={requests.utils.quote(name_query)}"
-            try:
-                resp = requests_get_with_retry(url, timeout=10)
-                resp.raise_for_status()
-                data = resp.json() or {}
+                token_url = f"{API_BASE}/{_api_key()}/searchplayers.php?p={requests.utils.quote(token)}"
+                response = requests_get_with_retry(token_url, timeout=8)
+                data = response.json() or {}
                 players = data.get("player") or []
-                # polite pause to avoid hitting rate limits when called in bulk
-                time.sleep(0.15)
-            except Exception as e:
-                logging.getLogger("etl.extract_thesportsdb").warning("fetch failed", extra={"error": str(e), "name": name_query})
-                players = []
-
-            # If empty, try tokenized fallback searches (first/last name)
-            if not players and ' ' in name_query:
-                parts = [p for p in name_query.split(' ') if p]
-                for token in parts[:2]:
-                    try:
-                        url2 = f"{API_BASE}/{os.getenv('THESPORTSDB_API_KEY','3')}/searchplayers.php?p={requests.utils.quote(token)}"
-                        r2 = requests_get_with_retry(url2, timeout=8)
-                        r2.raise_for_status()
-                        data2 = r2.json() or {}
-                        players = data2.get('player') or []
-                        if players:
-                            break
-                    except Exception:
-                        continue
-            _cache_set(key, players)
-            return players
-
-
-        def fetch_players_by_team(team_id: str):
-            """Lookup all players for a given team id using lookup_all_players.php endpoint.
-            Returns list of player dicts or empty list."""
-            key = f"lookup_team:{team_id}"
-            cached = _cache_get(key)
-            if cached is not None:
-                return cached
-            api_key = os.getenv("THESPORTSDB_API_KEY", "3")
-            url = f"{API_BASE}/{api_key}/lookup_all_players.php?id={requests.utils.quote(str(team_id))}"
-            try:
-                resp = requests_get_with_retry(url, timeout=12)
-                resp.raise_for_status()
-                data = resp.json() or {}
-                players = data.get("player") or []
-                time.sleep(0.15)
-            except Exception as e:
-                logging.getLogger("etl.extract_thesportsdb").warning("fetch team failed", extra={"error": str(e), "team_id": team_id})
-                players = []
-            _cache_set(key, players)
-            return players
-
-
-        def search_teams_by_name(name_query: str):
-            """Search for teams by name and return a list of team dicts (idTeam, strTeam).
-            Uses caching to avoid repeated requests."""
-            key = f"searchteams:{name_query}"
-            cached = _cache_get(key)
-            if cached is not None:
-                return cached
-            api_key = os.getenv("THESPORTSDB_API_KEY", "3")
-            url = f"{API_BASE}/{api_key}/searchteams.php?t={requests.utils.quote(name_query)}"
-            try:
-                resp = requests_get_with_retry(url, timeout=10)
-                resp.raise_for_status()
-                data = resp.json() or {}
-                teams = data.get("teams") or []
-                time.sleep(0.15)
-            except Exception as e:
-                logging.getLogger("etl.extract_thesportsdb").warning("team search failed", extra={"error": str(e), "query": name_query})
-                teams = []
-            _cache_set(key, teams)
-            return teams
-
-
-        def search_teams_by_league(league_name: str):
-            """Search teams by league name using search_all_teams.php?l=<league>.
-            Returns list of team dicts."""
-            key = f"searchteams_league:{league_name}"
-            cached = _cache_get(key)
-            if cached is not None:
-                return cached
-            api_key = os.getenv("THESPORTSDB_API_KEY", "3")
-            url = f"{API_BASE}/{api_key}/search_all_teams.php?l={requests.utils.quote(league_name)}"
-            try:
-                resp = requests_get_with_retry(url, timeout=12)
-                resp.raise_for_status()
-                data = resp.json() or {}
-                teams = data.get("teams") or []
-                time.sleep(0.15)
-            except Exception as e:
-                logging.getLogger("etl.extract_thesportsdb").warning("league team search failed", extra={"error": str(e), "league": league_name})
-                teams = []
-            _cache_set(key, teams)
-            return teams
-
-
-        def extract_players_for_team_names(team_names: list):
-            """Given a list of team name strings, discover matching team IDs and extract all players for each discovered team.
-            Returns combined DataFrame of players (may be empty)."""
-            rows = []
-            for tn in team_names:
-                teams = search_teams_by_name(tn)
-                # prefer exact matches on name when available
-                chosen = None
-                for t in teams:
-                    if t.get('strTeam') and t.get('strTeam').lower() == tn.lower():
-                        chosen = t
-                        break
-                # if not exact, try fuzzy match (if available)
-                if not chosen and _HAS_RAPIDFUZZ and teams:
-                    choices = {t.get('strTeam') or '': t for t in teams}
-                    best = process.extractOne(tn, list(choices.keys()), scorer=fuzz.WRatio)
-                    if best and best[1] >= 75:
-                        chosen = choices.get(best[0])
-                if not chosen and teams:
-                    chosen = teams[0]
-                if not chosen:
-                    continue
-                team_id = chosen.get('idTeam')
-                if not team_id:
-                    continue
-                players = fetch_players_by_team(team_id)
-                for p in players:
-                    try:
-                        rows.append({
-                            "id": p.get("idPlayer") or None,
-                            "name": p.get("strPlayer") or None,
-                            "team": chosen.get('strTeam') or None,
-                            "team_id": team_id,
-                            "image_url": p.get("strThumb") or None,
-                            "source": "thesportsdb",
-                        })
-                    except Exception:
-                        continue
-            return pd.DataFrame(rows)
-
-
-        def extract_all(sample_names: list = None) -> pd.DataFrame:
-            """Extract wrestlers metadata from TheSportsDB for a list of sample names.
-            If sample_names is None, returns empty DataFrame (safe default).
-            The function stores only metadata and thumbnail URLs; image download is optional and left to downstream jobs."""
-            rows = []
-            if not sample_names:
-                return pd.DataFrame(rows)
-            logger = logging.getLogger("etl.extract_thesportsdb")
-            # process in chunks to avoid long blocking and be polite to API
-            for n in sample_names:
-                players = fetch_wrestlers_by_name(n)
-                if not players:
-                    continue
-                for p in players:
-                    try:
-                        rows.append({
-                            "id": p.get("idPlayer") or None,
-                            "name": p.get("strPlayer") or n,
-                            "real_name": p.get("strRealName") or None,
-                            "promotion": p.get("strTeam") or None,
-                            "height": p.get("strHeight") or None,
-                            "weight": p.get("strWeight") or None,
-                            "date_born": p.get("dateBorn") or None,
-                            "nationality": p.get("strNationality") or None,
-                            "debut": p.get("strDebut") or None,
-                            "retired": p.get("strRetired") or None,
-                            "image_url": p.get("strThumb") or p.get("strRender") or None,
-                            "image_large": p.get("strImage") or None,
-                            "team": p.get("strTeam") or None,
-                            "description": p.get("strDescriptionEN") or None,
-                            "source": "thesportsdb",
-                        })
-                    except Exception as e:
-                        logger.debug("skipping player record", extra={"error": str(e), "player": p})
-            return pd.DataFrame(rows)
-
-
-        def run_and_save(sample_names: list, out_dir: str = "../data/processed"):
-            df = extract_all(sample_names)
-            os.makedirs(out_dir, exist_ok=True)
-            csv_path = os.path.join(out_dir, "wrestlers_thesportsdb.csv")
-            parquet_path = os.path.join(out_dir, "wrestlers_thesportsdb.parquet")
-            try:
-                df.to_csv(csv_path, index=False)
-                df.to_parquet(parquet_path, index=False)
+                if players:
+                    break
             except Exception:
-                # fallback: write only csv
-                df.to_csv(csv_path, index=False)
-            # write metadata
-            try:
-                meta = {
-                    'generated_at': datetime.utcnow().isoformat() + 'Z',
-                    'rows': len(df),
-                    'source': 'thesportsdb'
+                continue
+
+    _cache_set(key, players)
+    return players
+
+
+def fetch_players_by_team(team_id: str) -> list[dict]:
+    key = f"lookup_team:{team_id}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/lookup_all_players.php?id={requests.utils.quote(str(team_id))}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=12)
+        data = response.json() or {}
+        players = data.get("player") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("fetch team failed", extra={"error": str(exc), "team_id": team_id})
+        players = []
+
+    _cache_set(key, players)
+    return players
+
+
+def search_teams_by_name(name_query: str) -> list[dict]:
+    query = clean_name(name_query)
+    if not query:
+        return []
+
+    key = f"searchteams:{query}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/searchteams.php?t={requests.utils.quote(query)}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=10)
+        data = response.json() or {}
+        teams = data.get("teams") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("team search failed", extra={"error": str(exc), "query": query})
+        teams = []
+
+    _cache_set(key, teams)
+    return teams
+
+
+def search_teams_by_league(league_name: str) -> list[dict]:
+    league = clean_name(league_name)
+    if not league:
+        return []
+
+    key = f"searchteams_league:{league}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/search_all_teams.php?l={requests.utils.quote(league)}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=12)
+        data = response.json() or {}
+        teams = data.get("teams") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("league team search failed", extra={"error": str(exc), "league": league})
+        teams = []
+
+    _cache_set(key, teams)
+    return teams
+
+
+def _pick_best_team(query: str, teams: list[dict]) -> dict | None:
+    if not teams:
+        return None
+
+    lowered = query.lower()
+    for team in teams:
+        if clean_name(team.get("strTeam")).lower() == lowered:
+            return team
+
+    if _HAS_RAPIDFUZZ:
+        options = [clean_name(team.get("strTeam")) for team in teams]
+        match = process.extractOne(query, options, scorer=fuzz.WRatio)
+        if match and match[1] >= 75:
+            for team in teams:
+                if clean_name(team.get("strTeam")) == match[0]:
+                    return team
+
+    return teams[0]
+
+
+def _player_match_score(query: str, player: dict) -> float:
+    player_name = clean_name(player.get("strPlayer"))
+    real_name = clean_name(player.get("strRealName"))
+    team_name = clean_name(player.get("strTeam"))
+    sport = clean_name(player.get("strSport")).lower()
+    position = clean_name(player.get("strPosition")).lower()
+
+    query_slug = slugify_name(query)
+    player_slug = slugify_name(player_name)
+    real_slug = slugify_name(real_name)
+
+    score = 0.0
+    if player_slug == query_slug:
+        score += 1000
+    elif player_slug and query_slug and query_slug in player_slug:
+        score += 300
+
+    if real_slug == query_slug:
+        score += 700
+    elif real_slug and query_slug and query_slug in real_slug:
+        score += 150
+
+    if sport == "fighting":
+        score += 75
+    if position == "wrestler":
+        score += 50
+    if "wwe" in team_name.lower():
+        score += 40
+
+    try:
+        score += float(player.get("relevance") or 0)
+    except Exception:
+        pass
+
+    if _HAS_RAPIDFUZZ and player_name:
+        score += float(fuzz.WRatio(query, player_name))
+        if real_name:
+            score += float(fuzz.WRatio(query, real_name)) * 0.5
+
+    return score
+
+
+def _pick_best_player(query: str, players: list[dict]) -> dict | None:
+    if not players:
+        return None
+
+    query_slug = slugify_name(query)
+    exact_matches = [
+        player
+        for player in players
+        if slugify_name(player.get("strPlayer")) == query_slug
+    ]
+    if exact_matches:
+        players = exact_matches
+
+    fighting_players = [
+        player
+        for player in players
+        if clean_name(player.get("strSport")).lower() == "fighting"
+        or clean_name(player.get("strPosition")).lower() == "wrestler"
+    ]
+    if fighting_players:
+        players = fighting_players
+
+    best = max(players, key=lambda player: _player_match_score(query, player))
+    if _is_strict_name_match(query, best.get("strPlayer")) or _is_strict_name_match(query, best.get("strRealName")):
+        return best
+
+    query_slug = slugify_name(query)
+    player_slug = slugify_name(best.get("strPlayer"))
+    if query_slug and " " not in query_slug and query_slug in player_slug:
+        return best
+
+    if _HAS_RAPIDFUZZ:
+        player_name = clean_name(best.get("strPlayer"))
+        real_name = clean_name(best.get("strRealName"))
+        best_ratio = max(
+            float(fuzz.WRatio(query, player_name)) if player_name else 0.0,
+            float(fuzz.WRatio(query, real_name)) if real_name else 0.0,
+        )
+        if best_ratio >= 93 and clean_name(best.get("strSport")).lower() == "fighting":
+            return best
+
+    return None
+
+
+def extract_players_for_team_names(team_names: list[str]) -> pd.DataFrame:
+    rows = []
+    for team_name in team_names or []:
+        teams = search_teams_by_name(team_name)
+        chosen = _pick_best_team(clean_name(team_name), teams)
+        if not chosen or not chosen.get("idTeam"):
+            continue
+
+        for player in fetch_players_by_team(chosen["idTeam"]):
+            rows.append(
+                {
+                    "id": player.get("idPlayer") or None,
+                    "name": clean_name(player.get("strPlayer")),
+                    "team": clean_name(chosen.get("strTeam")),
+                    "team_id": chosen.get("idTeam"),
+                    "image_url": player.get("strThumb") or None,
+                    "source": "thesportsdb",
                 }
-                with open(os.path.join(out_dir, 'wrestlers_thesportsdb_metadata.json'), 'w', encoding='utf-8') as f:
-                    json.dump(meta, f)
-            except Exception:
-                pass
+            )
+
+    if not rows:
+        return pd.DataFrame(columns=["id", "name", "team", "team_id", "image_url", "source", "name_slug"])
+    return normalize_name_columns(pd.DataFrame(rows), ["name"])
 
 
-        def run_and_save_with_images(sample_names: list, out_dir: str = "../data/processed", images_dir: str = "../data/processed/images"):
-            df = extract_all(sample_names)
-            os.makedirs(out_dir, exist_ok=True)
-            os.makedirs(images_dir, exist_ok=True)
-            for i, row in df.iterrows():
-                img_url = row.get("image_url")
-                if img_url:
-                    try:
-                        r = requests_get_with_retry(img_url, timeout=10)
-                        if r and r.status_code == 200:
-                            ext = os.path.splitext(img_url)[1].split('?')[0] or '.jpg'
-                            fname = f"{row.get('id') or i}{ext}"
-                            path = os.path.join(images_dir, fname)
-                            with open(path, 'wb') as f:
-                                shutil.copyfileobj(r.raw, f)
-                            df.at[i, 'image_path'] = path
-                    except Exception:
-                        continue
-            run_and_save(sample_names, out_dir=out_dir)
+def extract_all(sample_names: list[str] | None = None) -> pd.DataFrame:
+    if not sample_names:
+        return pd.DataFrame()
+
+    rows = []
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    for name in sample_names:
+        players = fetch_wrestlers_by_name(name)
+        if not players:
+            continue
+
+        player = _pick_best_player(name, players)
+        if not player:
+            continue
+
+        try:
+            rows.append(
+                {
+                    "id": player.get("idPlayer") or None,
+                    "name": clean_name(player.get("strPlayer") or name),
+                    "real_name": clean_name(player.get("strRealName")),
+                    "promotion": clean_name(player.get("strTeam")),
+                    "height": player.get("strHeight") or None,
+                    "weight": player.get("strWeight") or None,
+                    "date_born": player.get("dateBorn") or None,
+                    "nationality": clean_name(player.get("strNationality")),
+                    "debut": clean_name(player.get("strDebut")),
+                    "retired": clean_name(player.get("strRetired")),
+                    "image_url": player.get("strThumb") or player.get("strCutout") or player.get("strRender") or None,
+                    "image_large": player.get("strImage") or player.get("strPoster") or None,
+                    "team": clean_name(player.get("strTeam")),
+                    "description": player.get("strDescriptionEN") or None,
+                    "source": "thesportsdb",
+                }
+            )
+        except Exception as exc:
+            logger.debug("skipping player record", extra={"error": str(exc), "player": player})
+
+    if not rows:
+        return pd.DataFrame()
+    return normalize_name_columns(pd.DataFrame(rows), ["name", "real_name"])
 
 
-        if __name__ == "__main__":
-            sample = ["The Undertaker", "John Cena", "Roman Reigns", "Seth Rollins", "Cody Rhodes"]
-            run_and_save(sample)
+def get_wrestler(name_query: str) -> dict | None:
+    df = extract_all([name_query])
+    if df.empty:
+        return None
+    return df.iloc[0].to_dict()
+
+
+def run_and_save(sample_names: list[str], out_dir: str = "../data/processed"):
+    df = extract_all(sample_names)
+    os.makedirs(out_dir, exist_ok=True)
+    csv_path = os.path.join(out_dir, "wrestlers_thesportsdb.csv")
+    parquet_path = os.path.join(out_dir, "wrestlers_thesportsdb.parquet")
+
+    try:
+        df.to_csv(csv_path, index=False)
+        df.to_parquet(parquet_path, index=False)
+    except Exception:
+        df.to_csv(csv_path, index=False)
+
+    try:
+        meta = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "rows": len(df),
+            "source": "thesportsdb",
+        }
+        with open(os.path.join(out_dir, "wrestlers_thesportsdb_metadata.json"), "w", encoding="utf-8") as handle:
+            json.dump(meta, handle)
+    except Exception:
+        pass
+
+
+def run_and_save_with_images(
+    sample_names: list[str],
+    out_dir: str = "../data/processed",
+    images_dir: str = "../data/processed/images",
+):
+    df = extract_all(sample_names)
+    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(images_dir, exist_ok=True)
+
+    for idx, row in df.iterrows():
+        image_url = row.get("image_url")
+        if not image_url:
+            continue
+        try:
+            response = requests_get_with_retry(image_url, timeout=10, stream=True)
+            if response.status_code != 200:
+                continue
+            extension = os.path.splitext(image_url)[1].split("?")[0] or ".jpg"
+            filename = f"{row.get('id') or idx}{extension}"
+            image_path = os.path.join(images_dir, filename)
+            with open(image_path, "wb") as handle:
+                shutil.copyfileobj(response.raw, handle)
+            df.at[idx, "image_path"] = image_path
+        except Exception:
+            continue
+
+    run_and_save(sample_names, out_dir=out_dir)
+
+
+if __name__ == "__main__":
+    sample = ["The Undertaker", "John Cena", "Roman Reigns", "Seth Rollins", "Cody Rhodes"]
+    run_and_save(sample)
