@@ -1,35 +1,61 @@
-# Buscador-WWE
-Repositorio para proyecto de ciencia de datos donde se juntan multiples origenes de datos relacionados con la lucha libre
+# Wrestling Pipeline
 
-IA Oruga (subpaquete)
-- Ruta: `IA_Oruga_Portable`
-- Propósito: Asistente local portable con UI web y agentes para extracción y generación de contenidos.
+Instrucciones rápidas para levantar el stack localmente (Rol B - API + Docker).
 
-Instrucciones rápidas (Linux / Zorin):
+Prerequisitos:
+- Docker y docker-compose instalados
+- Copiar el archivo de variables de entorno: crea `.env` en la carpeta `wrestling-pipeline/` con las variables mostradas abajo
 
-1. Preparar e instalar dependencias:
+Ejemplo mínimo de `.env`:
 
-```bash
-cd IA_Oruga_Portable
-bash setup.sh
-```
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=wrestling
 
-2. Activar entorno virtual:
+Levantar servicios:
 
 ```bash
-source venv/bin/activate
+cd wrestling-pipeline
+docker compose -f docker/docker-compose.yml up --build
 ```
 
-3. Ejecutar la interfaz web:
+Orquestación oficial (recomendada): usar el script `scripts/run_local.sh` desde `wrestling-pipeline/`.
+Este script realiza:
+- `docker compose build` y `docker compose up -d`
+- Ejecuta la secuencia ETL dentro del contenedor `etl-runner` (TheSportsDB, Kaggle extractor, normalize)
+- Espera la salud de la API y abre el dashboard
+
+Ejecutar orquestación completa:
 
 ```bash
-./start-oruga.sh
+cd wrestling-pipeline
+./scripts/run_local.sh
 ```
+
+Requisitos y notas:
+- Asegúrate de tener `Docker` y `docker-compose` instalados.
+- Crea un `.env` en `wrestling-pipeline/` con las variables (ej. `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
+- Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
+ - Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
+	 Ejemplo (archivo `wrestling-pipeline/.env`):
+
+```
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=wrestling
+THESPORTSDB_API_KEY=3
+```
+- Los datos procesados se montan en `wrestling-pipeline/data` y son compartidos entre ETL, API y dashboard.
+
+Probar API:
+
+- Abrir http://localhost:8000/wrestlers
+- Abrir http://localhost:8000/titles
 
 Notas:
-- Si un script busca `ia-oruga/scripts/build_ia_oruga_package.sh`, ahora existe y crea `IA_Oruga_Package.zip`.
-- En Windows se dispone de `start-oruga.bat` para iniciar desde CMD/PowerShell; crear manualmente un venv si se requiere replicar `setup.sh`.
- - Comprobaciones post-setup:
+- El servicio `etl-runner` está configurado con `restart: 'no'` para correr una vez y terminar.
+- Si necesitas ver logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
 
-	- Linux: `bash ia-oruga/scripts/check_setup.sh` (usa el `python` del `venv` si está presente).
-	- Windows: `ia-oruga\scripts\check_setup.bat`.
+### Credenciales de Administrador:
+Para activar el modo administrador en la interfaz web, introduce la siguiente contraseña en cualquiera de los buscadores de luchadores:
+`K#9vLp$2mQx@7nRf!4Zd`

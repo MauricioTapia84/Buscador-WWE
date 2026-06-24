@@ -1,0 +1,40 @@
+name: ETL CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r wrestling-pipeline/etl/requirements.txt
+
+      - name: Build ETL Docker image
+        run: |
+          cd wrestling-pipeline/etl
+          docker build -t buscador-wwe-etl -f Dockerfile.etl .
+
+      - name: Run tests inside ETL image
+        env:
+          CI: true
+        run: |
+          docker run --rm -v ${{ github.workspace }}/wrestling-pipeline/data:/app/data buscador-wwe-etl bash -lc "pytest -q || (echo 'Tests failed inside container' && exit 1)"
+
+      - name: Run ETL tests
+        working-directory: wrestling-pipeline
+        run: |
+          pytest -q

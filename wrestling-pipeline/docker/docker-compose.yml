@@ -1,0 +1,46 @@
+services:
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../data:/app/data
+    depends_on:
+      - db
+    env_file:
+      - ../.env
+
+  dashboard:
+    build:
+      context: ../dashboards
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
+  db:
+    image: postgres:15
+    env_file:
+      - ../.env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  etl-runner:
+    build:
+      context: ../etl
+      dockerfile: Dockerfile.etl
+    volumes:
+      - ../data:/app/data
+    depends_on:
+      - db
+    restart: 'no'
+    environment:
+      - THESPORTSDB_API_KEY=${THESPORTSDB_API_KEY:-3}
+    command: ["python", "/app/run_etl.py"]
+
+volumes:
+  db_data:
+

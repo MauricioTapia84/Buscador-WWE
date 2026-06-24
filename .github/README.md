@@ -1,44 +1,61 @@
-# 🤖 Ecosistema de Agentes Inteligentes — FadeBooker
+# Wrestling Pipeline
 
-Este directorio contiene la configuración del sistema de agentes personalizados para **FadeBooker**, optimizado para el desarrollo ágil, la documentación automatizada y el análisis de negocio.
+Instrucciones rápidas para levantar el stack localmente (Rol B - API + Docker).
 
-## 🏛️ Arquitectura de Coordinación (3 Niveles)
+Prerequisitos:
+- Docker y docker-compose instalados
+- Copiar el archivo de variables de entorno: crea `.env` en la carpeta `wrestling-pipeline/` con las variables mostradas abajo
 
-1.  **Orquestador Principal (`@system-orchestrator`)**: Punto de entrada único. Analiza tu petición y delega al área técnica correspondiente.
-2.  **Orquestadores de Dominio**: Especialistas en áreas macro (Programación, Documentación, Datos).
-3.  **Agentes Especialistas**: Expertos en tareas granulares (Frontend, Backend, DB, DevOps, Seguridad, etc.).
+Ejemplo mínimo de `.env`:
 
-## 📁 Estructura del Ecosistema
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=wrestling
 
-```
-.github/
-├── system-orchestrator.agent.md    # Punto de partida recomendado
-├── AGENTS.md                        # Registro maestro y mapa de estados
-├── copilot-instructions.md          # Reglas de oro y stack tecnológico
-└── agents/
-    ├── programming/                 # Desarrollo de Software (React, Node, SQL)
-    ├── study/                       # Gestión de Knowledge Base y Documentos
-    ├── data/                        # Métricas y Business Intelligence
-    └── support/                     # Soporte Git/GitHub
+Levantar servicios:
+
+```bash
+cd wrestling-pipeline
+docker compose -f docker/docker-compose.yml up --build
 ```
 
-## 🚀 Cómo usar los Agentes
+Orquestación oficial (recomendada): usar el script `scripts/run_local.sh` desde `wrestling-pipeline/`.
+Este script realiza:
+- `docker compose build` y `docker compose up -d`
+- Ejecuta la secuencia ETL dentro del contenedor `etl-runner` (TheSportsDB, Kaggle extractor, normalize)
+- Espera la salud de la API y abre el dashboard
 
-Para obtener los mejores resultados, **comienza tus peticiones con @system-orchestrator**. Él se encargará de llamar a los agentes necesarios.
+Ejecutar orquestación completa:
 
-### Ejemplos de uso:
+```bash
+cd wrestling-pipeline
+./scripts/run_local.sh
+```
 
--   **Desarrollo Completo**: `@system-orchestrator: Implementa el sistema de reseñas de barberos, incluyendo DB, API y Frontend.`
--   **Análisis de Documentación**: `@system-orchestrator: Resume el Acta de Constitución y dime si mis últimos cambios cumplen los requerimientos.`
--   **Gestión Git**: `@system-orchestrator: Revisa mis cambios y prepara un commit siguiendo el estándar.`
--   **Métricas de Negocio**: `@system-orchestrator: Analiza las tendencias de ventas de este mes basándote en los logs de Mercado Pago.`
+Requisitos y notas:
+- Asegúrate de tener `Docker` y `docker-compose` instalados.
+- Crea un `.env` en `wrestling-pipeline/` con las variables (ej. `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
+- Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
+ - Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
+	 Ejemplo (archivo `wrestling-pipeline/.env`):
 
-## 🛠️ Stack Tecnológico de Referencia
+```
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=wrestling
+THESPORTSDB_API_KEY=3
+```
+- Los datos procesados se montan en `wrestling-pipeline/data` y son compartidos entre ETL, API y dashboard.
 
--   **Backend**: Node.js 20, Hexagonal Architecture, Knex.js.
--   **Frontend**: React 18, Vite, Tailwind CSS.
--   **BD**: Azure SQL Server.
--   **Integraciones**: Mercado Pago v2, Cloudinary.
+Probar API:
 
----
-Para más detalles sobre cada agente y su responsabilidad, consulta [AGENTS.md](AGENTS.md).
+- Abrir http://localhost:8000/wrestlers
+- Abrir http://localhost:8000/titles
+
+Notas:
+- El servicio `etl-runner` está configurado con `restart: 'no'` para correr una vez y terminar.
+- Si necesitas ver logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
+
+### Credenciales de Administrador:
+Para activar el modo administrador en la interfaz web, introduce la siguiente contraseña en cualquiera de los buscadores de luchadores:
+`K#9vLp$2mQx@7nRf!4Zd`

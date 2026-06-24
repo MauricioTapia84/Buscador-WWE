@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/wrestling
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wrestling
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  etl-runner:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile.etl
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/wrestling
+    depends_on:
+      - db
+    restart: 'no'
+
+  dashboard:
+    build:
+      context: ./dashboards
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8050}:8050"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  db_data:
