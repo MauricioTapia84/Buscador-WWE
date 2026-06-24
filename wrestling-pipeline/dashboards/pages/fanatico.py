@@ -3,7 +3,7 @@ import streamlit as st
 from data_client import fetch_titles, fetch_wrestlers
 from role_views import apply_secret, ensure_session_state, hide_native_page_nav, render_fanatico_view
 
-st.set_page_config(page_title="WWE Dashboard | Fanático", page_icon="W", layout="wide")
+st.set_page_config(page_title="WWE Dashboard | Fanático", layout="wide")
 ensure_session_state()
 hide_native_page_nav()
 

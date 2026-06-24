@@ -13,7 +13,6 @@ from role_views import (
 
 st.set_page_config(
     page_title="Wrestling Data Explorer",
-    page_icon="W",
     layout="wide",
 )
 

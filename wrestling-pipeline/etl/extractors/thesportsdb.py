@@ -6,14 +6,18 @@ import time
 from hashlib import sha1
 from typing import List, Optional
 
-import pandas as pd
-import requests
 try:
     from rapidfuzz import fuzz, process
     _HAS_RAPIDFUZZ = True
-except Exception:
+except ImportError:
+    fuzz = None
+    process = None
     _HAS_RAPIDFUZZ = False
 
+import pandas as pd
+import requests
+
+from ..name_utils import clean_name, normalize_name_columns, slugify_name
 from ..utils.retry_utils import requests_get_with_retry
 
 API_BASE = "https://www.thesportsdb.com/api/v1/json"
@@ -21,62 +25,120 @@ CACHE_DIR = os.path.join("data", "raw", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
+def _cache_path(key: str) -> str:
+    return os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
+
+
 def _cache_get(key: str):
-    path = os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
+    path = _cache_path(key)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return None
 
 
 def _cache_set(key: str, value):
-    path = os.path.join(CACHE_DIR, f"{sha1(key.encode()).hexdigest()}.json")
+    path = _cache_path(key)
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(value, f)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(value, handle)
     except Exception:
         pass
 
 
-def _best_match(name: str, choices: List[str], score_cutoff: int = 85):
-    if not name or not choices or not _HAS_RAPIDFUZZ:
-        return None, 0
-    try:
-        match = process.extractOne(name, choices, scorer=fuzz.WRatio, score_cutoff=score_cutoff)
-        if match:
-            return match[0], match[1]
-    except Exception:
-        pass
-    return None, 0
+def _is_strict_name_match(query: str, candidate: str) -> bool:
+    query_slug = slugify_name(query)
+    candidate_slug = slugify_name(candidate)
+    if not query_slug or not candidate_slug:
+        return False
+    if query_slug == candidate_slug:
+        return True
+
+    query_tokens = {token for token in query_slug.split() if len(token) > 1}
+    candidate_tokens = set(candidate_slug.split())
+    return len(query_tokens) >= 2 and query_tokens.issubset(candidate_tokens)
 
 
-def fetch_wrestlers_by_name(name_query: str) -> List[dict]:
-    key = f"searchplayers:{name_query}"
+def _search_cached_players(query: str) -> list[dict]:
+    if not os.path.exists(CACHE_DIR):
+        return []
+
+    best_player = None
+    best_score = 0.0
+    for filename in os.listdir(CACHE_DIR):
+        if not filename.endswith(".json"):
+            continue
+        path = os.path.join(CACHE_DIR, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+
+        if not isinstance(payload, list):
+            continue
+
+        for player in payload:
+            if not isinstance(player, dict) or not clean_name(player.get("strPlayer")):
+                continue
+            if not (
+                _is_strict_name_match(query, player.get("strPlayer"))
+                or _is_strict_name_match(query, player.get("strRealName"))
+            ):
+                continue
+            score = _player_match_score(query, player)
+            if score > best_score:
+                best_player = player
+                best_score = score
+
+    if best_player and best_score >= 500:
+        return [best_player]
+    return []
+
+
+def _api_key() -> str:
+    return os.getenv("THESPORTSDB_API_KEY", "3")
+
+
+def fetch_wrestlers_by_name(name_query: str) -> list[dict]:
+    query = clean_name(name_query)
+    if not query:
+        return []
+
+    key = f"searchplayers:{query}"
     cached = _cache_get(key)
     if cached is not None:
-        return cached
+        best_cached = _pick_best_player(query, cached)
+        if best_cached:
+            return [best_cached]
 
-    api_key = os.getenv("THESPORTSDB_API_KEY", "3")
-    url = f"{API_BASE}/{api_key}/searchplayers.php?p={requests.utils.quote(name_query)}"
+    cached_scan = _search_cached_players(query)
+    if cached_scan:
+        _cache_set(key, cached_scan)
+        return cached_scan
+
+    logger = logging.getLogger("etl.extract_thesportsdb")
+    url = f"{API_BASE}/{_api_key()}/searchplayers.php?p={requests.utils.quote(query)}"
+
     try:
-        resp = requests_get_with_retry(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json() or {}
+        response = requests_get_with_retry(url, timeout=10)
+        data = response.json() or {}
         players = data.get("player") or []
+        time.sleep(0.15)
     except Exception as exc:
-        logging.getLogger("etl.extract_thesportsdb").warning("fetch failed", extra={"error": str(exc), "name": name_query})
+        logger.warning("fetch failed", extra={"error": str(exc), "query_name": query})
         players = []
 
-    if not players and ' ' in name_query:
-        for token in [t for t in name_query.split(' ') if t][:2]:
+    if not players and " " in query:
+        for token in [part for part in query.split(" ") if part][:2]:
             try:
-                url = f"{API_BASE}/{api_key}/searchplayers.php?p={requests.utils.quote(token)}"
-                resp = requests_get_with_retry(url, timeout=8)
-                resp.raise_for_status()
-                players = (resp.json() or {}).get("player") or []
+                token_url = f"{API_BASE}/{_api_key()}/searchplayers.php?p={requests.utils.quote(token)}"
+                response = requests_get_with_retry(token_url, timeout=8)
+                data = response.json() or {}
+                players = data.get("player") or []
                 if players:
                     break
             except Exception:
@@ -84,6 +146,141 @@ def fetch_wrestlers_by_name(name_query: str) -> List[dict]:
 
     _cache_set(key, players)
     return players
+
+
+def fetch_players_by_team(team_id: str) -> list[dict]:
+    key = f"lookup_team:{team_id}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/lookup_all_players.php?id={requests.utils.quote(str(team_id))}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=12)
+        data = response.json() or {}
+        players = data.get("player") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("fetch team failed", extra={"error": str(exc), "team_id": team_id})
+        players = []
+
+    _cache_set(key, players)
+    return players
+
+
+def search_teams_by_name(name_query: str) -> list[dict]:
+    query = clean_name(name_query)
+    if not query:
+        return []
+
+    key = f"searchteams:{query}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/searchteams.php?t={requests.utils.quote(query)}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=12)
+        data = response.json() or {}
+        teams = data.get("teams") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("team search failed", extra={"error": str(exc), "query": query})
+        teams = []
+
+    _cache_set(key, teams)
+    return teams
+
+
+def search_teams_by_league(league_name: str) -> list[dict]:
+    league = clean_name(league_name)
+    if not league:
+        return []
+
+    key = f"searchteams_league:{league}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    url = f"{API_BASE}/{_api_key()}/search_all_teams.php?l={requests.utils.quote(league)}"
+    logger = logging.getLogger("etl.extract_thesportsdb")
+
+    try:
+        response = requests_get_with_retry(url, timeout=12)
+        data = response.json() or {}
+        teams = data.get("teams") or []
+        time.sleep(0.15)
+    except Exception as exc:
+        logger.warning("league team search failed", extra={"error": str(exc), "league": league})
+        teams = []
+
+    _cache_set(key, teams)
+    return teams
+
+
+def _pick_best_team(query: str, teams: list[dict]) -> dict | None:
+    if not teams:
+        return None
+
+    lowered = query.lower()
+    for team in teams:
+        if clean_name(team.get("strTeam")).lower() == lowered:
+            return team
+
+    if _HAS_RAPIDFUZZ:
+        options = [clean_name(team.get("strTeam")) for team in teams]
+        match = process.extractOne(query, options, scorer=fuzz.WRatio)
+        if match and match[1] >= 75:
+            for team in teams:
+                if clean_name(team.get("strTeam")) == match[0]:
+                    return team
+
+    return teams[0]
+
+
+def _player_match_score(query: str, player: dict) -> float:
+    player_name = clean_name(player.get("strPlayer"))
+    real_name = clean_name(player.get("strRealName"))
+    team_name = clean_name(player.get("strTeam"))
+    sport = clean_name(player.get("strSport")).lower()
+    position = clean_name(player.get("strPosition")).lower()
+
+    query_slug = slugify_name(query)
+    player_slug = slugify_name(player_name)
+    real_slug = slugify_name(real_name)
+
+    score = 0.0
+    if player_slug and query_slug:
+        score += 100 * (player_slug == query_slug)
+        score += 50 * (player_slug in query_slug or query_slug in player_slug)
+    if real_slug and query_slug:
+        score += 40 * (real_slug == query_slug)
+    if team_name:
+        score += 10 if query_slug in slugify_name(team_name) else 0
+    if sport:
+        score += 5 if 'wrestling' in sport else 0
+    if position:
+        score += 3 if 'wrest' in position else 0
+    return float(score)
+
+
+def _pick_best_player(query: str, players: list[dict]) -> dict | None:
+    if not players:
+        return None
+    if len(players) == 1:
+        return players[0]
+    if _HAS_RAPIDFUZZ:
+        options = [clean_name(p.get("strPlayer")) for p in players if clean_name(p.get("strPlayer"))]
+        match = process.extractOne(query, options, scorer=fuzz.WRatio)
+        if match and match[1] >= 75:
+            for p in players:
+                if clean_name(p.get("strPlayer")) == match[0]:
+                    return p
+    return players[0]
 
 
 def extract_all(sample_names: Optional[List[str]] = None) -> pd.DataFrame:
@@ -116,6 +313,11 @@ def extract_all(sample_names: Optional[List[str]] = None) -> pd.DataFrame:
             except Exception as exc:
                 logger.debug("skipping player record", extra={"error": str(exc), "player": p})
     return pd.DataFrame(rows)
+
+
+def get_wrestler(name_query: str) -> dict | None:
+    players = fetch_wrestlers_by_name(name_query)
+    return players[0] if players else None
 
 
 def run_and_save(sample_names: List[str], out_dir: str = "../data/processed"):

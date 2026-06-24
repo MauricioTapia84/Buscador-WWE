@@ -5,7 +5,6 @@ from data_client import fetch_health, fetch_titles, fetch_wrestlers, get_api_url
 
 st.set_page_config(
     page_title="WrestlingData Explorer",
-    page_icon="W",
     layout="wide",
 )
 

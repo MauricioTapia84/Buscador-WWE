@@ -186,7 +186,11 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
     timeline = history_df.copy()
     for column in ["start_date", "end_date", "won_date"]:
         if column in timeline.columns:
-            timeline[column] = timeline[column].dt.strftime("%Y-%m-%d")
+            timeline[column] = pd.to_datetime(timeline[column], errors="coerce")
+            if pd.api.types.is_datetime64_any_dtype(timeline[column]):
+                timeline[column] = timeline[column].dt.strftime("%Y-%m-%d")
+            else:
+                timeline[column] = timeline[column].astype(str)
     keep = [column for column in ["title", "start_date", "end_date", "event_name", "won_date", "reign_days"] if column in timeline.columns]
     st.dataframe(timeline[keep], use_container_width=True, hide_index=True)
 
