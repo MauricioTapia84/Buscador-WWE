@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650">
+  <defs>
+    <!-- Flecha más elegante -->
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#6c757d"/>
+    </marker>
+    <!-- Sombra para los rectángulos -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <style>
+    .box {
+      fill: #ffffff;
+      stroke: #dee2e6;
+      stroke-width: 2px;
+      rx: 12px;
+      ry: 12px;
+      filter: url(#shadow);
+    }
+    .box-highlight {
+      fill: #e3f2fd;
+      stroke: #90caf9;
+      stroke-width: 2px;
+      rx: 12px;
+      ry: 12px;
+      filter: url(#shadow);
+    }
+    .box-dark {
+      fill: #f8f9fa;
+      stroke: #ced4da;
+      stroke-width: 2px;
+      rx: 12px;
+      ry: 12px;
+      filter: url(#shadow);
+    }
+    .title {
+      font: bold 15px 'Segoe UI', 'Inter', sans-serif;
+      fill: #212529;
+      letter-spacing: -0.2px;
+    }
+    .subtitle {
+      font: 13px 'Segoe UI', 'Inter', sans-serif;
+      fill: #495057;
+    }
+    .small-text {
+      font: 12px 'Segoe UI', 'Inter', sans-serif;
+      fill: #6c757d;
+    }
+    .badge {
+      font: bold 11px 'Segoe UI', 'Inter', sans-serif;
+      fill: #ffffff;
+    }
+    .arrow {
+      fill: none;
+      stroke: #6c757d;
+      stroke-width: 2.5px;
+      marker-end: url(#arrowhead);
+    }
+    .arrow-dashed {
+      fill: none;
+      stroke: #adb5bd;
+      stroke-width: 2px;
+      stroke-dasharray: 6 4;
+      marker-end: url(#arrowhead);
+    }
+    .label-bg {
+      fill: #f8f9fa;
+      stroke: #dee2e6;
+      rx: 20px;
+      ry: 20px;
+    }
+    .label-text {
+      font: 11px 'Segoe UI', 'Inter', sans-serif;
+      fill: #495057;
+      font-weight: 500;
+    }
+  </style>
+
+  <!-- ==================== FILA 1: ORÍGENES ==================== -->
+  <rect x="40" y="40" width="260" height="130" class="box" />
+  <text x="65" y="70" class="title">📦 Orígenes de datos</text>
+  <text x="65" y="100" class="subtitle">🟦 TheSportsDB API</text>
+  <text x="65" y="122" class="subtitle">📄 Wikipedia API</text>
+  <text x="65" y="144" class="subtitle">🗄️ Kaggle SQLite</text>
+
+  <!-- ==================== FILA 1: EXTRACTORES ==================== -->
+  <rect x="370" y="40" width="260" height="130" class="box-highlight" />
+  <text x="395" y="70" class="title">⚙️ Extractores</text>
+  <text x="395" y="100" class="subtitle">extract_thesportsdb.py</text>
+  <text x="395" y="122" class="subtitle">extract_wikipedia.py</text>
+  <text x="395" y="144" class="subtitle">extract_kaggle.py</text>
+
+  <!-- ==================== FILA 1: CACHE ==================== -->
+  <rect x="700" y="40" width="240" height="130" class="box-dark" />
+  <text x="725" y="70" class="title">💾 Raw &amp; cache</text>
+  <text x="725" y="100" class="subtitle">data/raw/</text>
+  <text x="725" y="122" class="small-text">• Respuestas API</text>
+  <text x="725" y="142" class="small-text">• Copia SQLite original</text>
+
+  <!-- ==================== FLECHAS FILA 1 ==================== -->
+  <path class="arrow" d="M 300 105 L 355 105" />
+  <path class="arrow" d="M 630 105 L 685 105" />
+
+  <!-- ==================== FILA 2: NORMALIZACIÓN ==================== -->
+  <rect x="370" y="240" width="260" height="130" class="box" />
+  <text x="395" y="270" class="title">🧹 Normalización</text>
+  <text x="395" y="300" class="subtitle">transform.py</text>
+  <text x="395" y="322" class="small-text">• Limpieza de nombres</text>
+  <text x="395" y="342" class="small-text">• Unificación de fechas</text>
+  <text x="395" y="360" class="small-text">• Validación con Pydantic</text>
+
+  <!-- ==================== FLECHA FILA 1 → FILA 2 ==================== -->
+  <path class="arrow" d="M 500 170 L 500 225" />
+  <rect x="470" y="188" width="60" height="24" class="label-bg" />
+  <text x="485" y="204" class="label-text">ETL</text>
+
+  <!-- ==================== FILA 3: CONSOLIDACIÓN ==================== -->
+  <rect x="370" y="440" width="260" height="130" class="box-highlight" />
+  <text x="395" y="470" class="title">📊 Consolidación</text>
+  <text x="395" y="500" class="subtitle">load.py → wrestling.db</text>
+  <text x="395" y="522" class="small-text">Tablas:</text>
+  <text x="395" y="540" class="small-text">wrestlers · titles · matches</text>
+  <text x="395" y="558" class="small-text">events · promotions</text>
+
+  <!-- ==================== FLECHA FILA 2 → FILA 3 ==================== -->
+  <path class="arrow" d="M 500 370 L 500 425" />
+
+  <!-- ==================== FILA 3: DESTINOS ==================== -->
+  <!-- Infra / DB -->
+  <rect x="40" y="440" width="260" height="130" class="box-dark" />
+  <text x="65" y="470" class="title">🐳 Infraestructura</text>
+  <text x="65" y="500" class="subtitle">PostgreSQL / SQLite</text>
+  <text x="65" y="522" class="small-text">• Volumen persistente</text>
+  <text x="65" y="542" class="small-text">• Índices optimizados</text>
+
+  <!-- API / Dashboard -->
+  <rect x="700" y="440" width="240" height="130" class="box" />
+  <text x="725" y="470" class="title">🚀 API / Dashboard</text>
+  <text x="725" y="500" class="subtitle">FastAPI (port 8000)</text>
+  <text x="725" y="522" class="subtitle">Streamlit (port 8501)</text>
+  <text x="725" y="544" class="small-text">• Endpoints REST</text>
+  <text x="725" y="562" class="small-text">• Vistas por audiencia</text>
+
+  <!-- ==================== FLECHAS FILA 3 ==================== -->
+  <!-- De consolidación a Infra -->
+  <path class="arrow" d="M 370 505 L 315 505" />
+  <!-- De consolidación a API/Dashboard -->
+  <path class="arrow" d="M 630 505 L 685 505" />
+
+  <!-- ==================== LÍNEA DE TIEMPO / FLUJO GENERAL ==================== -->
+  <rect x="40" y="610" width="920" height="30" rx="8" ry="8" fill="#f1f3f5" stroke="#dee2e6" stroke-width="1" />
+  <text x="60" y="630" class="small-text" fill="#495057">
+    🔄 Flujo End‑to‑End: Extracción → Normalización → Consolidación → API/Dashboard
+  </text>
+  <text x="770" y="630" class="small-text" fill="#6c757d">
+    ⚡ Pipeline reproducible con Docker
+  </text>
+
+</svg>

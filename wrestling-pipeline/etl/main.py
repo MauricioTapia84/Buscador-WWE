@@ -1,13 +1,12 @@
-
+import os
 import logging
-from logging_config import configure_logging
+import pandas as pd
 
-from extract_thesportsdb import get_wrestler
-from extract_wikipedia import extract_wikipedia_pages
-from extract_kaggle import extract_from_sqlite
-from transform import clean_wrestlers, clean_champions
-from load import load_data
-from validate import validate_and_report
+from etl.utils import configure_logging
+from etl.extractors import extract_from_sqlite, extract_wrestlers_from_thesportsdb, extract_wikipedia_pages
+from etl.transform import clean_wrestlers, clean_champions
+from etl.load import load_data
+from etl.validate import validate_and_report
 
 
 def run_pipeline(sample_names=None, out_prefix: str = "validation_report"):
@@ -15,47 +14,32 @@ def run_pipeline(sample_names=None, out_prefix: str = "validation_report"):
     logger = logging.getLogger("etl.main")
     logger.info("Starting pipeline", extra={"etl_stage": "start"})
 
-    # Simple extraction: call external APIs for a list of sample names
     if sample_names is None:
         sample_names = ["Undertaker", "John_Cena", "Roman_Reigns"]
 
     logger.info("Extrayendo datos", extra={"etl_stage": "extract"})
     wrestlers_list = []
     for name in sample_names:
-        w = get_wrestler(name)
-        if w:
-            wrestlers_list.append(w)
+        wrestlers_df = extract_wrestlers_from_thesportsdb([name])
+        if not wrestlers_df.empty:
+            wrestlers_list.append(wrestlers_df)
 
-    wrestlers_df = None
     if wrestlers_list:
-        import pandas as pd
+        wrestlers_df = pd.concat(wrestlers_list, ignore_index=True, sort=False)
+        wrestlers_df = clean_wrestlers(wrestlers_df)
+    else:
+        wrestlers_df = None
 
-        wrestlers_df = pd.DataFrame(wrestlers_list)
-
-    # Also try to extract any local sqlite source (kaggle / provided DB)
     try:
         matches_df = extract_from_sqlite()
         logger.info("Extracted matches", extra={"rows": len(matches_df)})
     except Exception:
         matches_df = None
 
-    logger.info("Transformando datos", extra={"etl_stage": "transform"})
-    if wrestlers_df is not None:
-        wrestlers_df = clean_wrestlers(wrestlers_df)
     champions_df = None
-    try:
-        champions_raw = None
-        # attempt to read champions file if exists
-        import os
-        import pandas as pd
-
-        champions_path = os.path.join("..", "data", "raw", "champions.csv")
-        if os.path.exists(champions_path):
-            champions_raw = pd.read_csv(champions_path)
-    except Exception:
-        champions_raw = None
-
-    if champions_raw is not None:
+    champions_path = os.path.join("..", "data", "raw", "champions.csv")
+    if os.path.exists(champions_path):
+        champions_raw = pd.read_csv(champions_path)
         champions_df = clean_champions(champions_raw)
 
     logger.info("Validando datos", extra={"etl_stage": "validate"})

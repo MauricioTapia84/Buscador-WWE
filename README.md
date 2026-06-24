@@ -1,61 +1,63 @@
 # Wrestling Pipeline
 
-Instrucciones rápidas para levantar el stack localmente (Rol B - API + Docker).
+Este repositorio contiene el proyecto de datos y dashboard de lucha libre basado en un pipeline ETL, una API y un dashboard.
 
-Prerequisitos:
-- Docker y docker-compose instalados
-- Copiar el archivo de variables de entorno: crea `.env` en la carpeta `wrestling-pipeline/` con las variables mostradas abajo
+## Documentación disponible
+- `wrestling-pipeline/docs/manual_usuario.md`
+- `wrestling-pipeline/docs/documentacion_tecnica.md`
+- `wrestling-pipeline/docs/api_documentation.md`
+- `wrestling-pipeline/docs/guia_despliegue.md`
+- `wrestling-pipeline/docs/.md/ARCHITECTURE.md`
+- `wrestling-pipeline/docs/.md/informe_final.md`
+- `wrestling-pipeline/docs/.md/diagrama_arquitectura.svg`
+- `wrestling-pipeline/docs/diagrama_arquitectura.png`
 
-Ejemplo mínimo de `.env`:
+## Requisitos
+- Docker
+- Docker Compose
+- Clonar el repositorio y colocar el proyecto en una carpeta accesible.
 
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=wrestling
-
-Levantar servicios:
-
-```bash
-cd wrestling-pipeline
-docker compose -f docker/docker-compose.yml up --build
-```
-
-Orquestación oficial (recomendada): usar el script `scripts/run_local.sh` desde `wrestling-pipeline/`.
-Este script realiza:
-- `docker compose build` y `docker compose up -d`
-- Ejecuta la secuencia ETL dentro del contenedor `etl-runner` (TheSportsDB, Kaggle extractor, normalize)
-- Espera la salud de la API y abre el dashboard
-
-Ejecutar orquestación completa:
+## Configuración mínima
+Crear el archivo `wrestling-pipeline/.env` con al menos:
 
 ```bash
-cd wrestling-pipeline
-./scripts/run_local.sh
-```
-
-Requisitos y notas:
-- Asegúrate de tener `Docker` y `docker-compose` instalados.
-- Crea un `.env` en `wrestling-pipeline/` con las variables (ej. `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
-- Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
- - Para usar tu propia API key de TheSportsDB, añade `THESPORTSDB_API_KEY` en `.env` (si no se provee, usa la clave pública por defecto `3`).
-	 Ejemplo (archivo `wrestling-pipeline/.env`):
-
-```
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=wrestling
 THESPORTSDB_API_KEY=3
 ```
-- Los datos procesados se montan en `wrestling-pipeline/data` y son compartidos entre ETL, API y dashboard.
 
-Probar API:
+## Levantar el proyecto
+Desde `wrestling-pipeline/`:
 
-- Abrir http://localhost:8000/wrestlers
-- Abrir http://localhost:8000/titles
+```bash
+./scripts/run_local.sh
+```
 
-Notas:
-- El servicio `etl-runner` está configurado con `restart: 'no'` para correr una vez y terminar.
-- Si necesitas ver logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
+Este script realiza:
+- construcción de los servicios Docker
+- levantado del stack
+- ejecución del pipeline ETL dentro del contenedor `etl-runner`
+- verificación de salud del API
 
-### Credenciales de Administrador:
-Para activar el modo administrador en la interfaz web, introduce la siguiente contraseña en cualquiera de los buscadores de luchadores:
-`K#9vLp$2mQx@7nRf!4Zd`
+## Probar la API
+- `http://localhost:8000/wrestlers`
+- `http://localhost:8000/titles`
+- `http://localhost:8000/matches`
+
+## Comprobar los datos procesados
+Los outputs esperados se generan en `wrestling-pipeline/data/processed`:
+- `wrestlers.csv`
+- `titles.csv`
+- `matches.csv`
+
+## Ejecutar tests
+Desde `wrestling-pipeline/`:
+
+```bash
+./scripts/run_tests.sh
+```
+
+## Notas
+- Si necesitas ver los logs del ETL: `docker compose -f docker/docker-compose.yml logs etl-runner`.
+- El dashboard consume datos reales desde la API y no inventa información.
