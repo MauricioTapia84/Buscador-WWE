@@ -17,8 +17,12 @@ except ImportError:
 import pandas as pd
 import requests
 
-from ..name_utils import clean_name, normalize_name_columns, slugify_name
-from ..utils.retry_utils import requests_get_with_retry
+try:
+    from ..name_utils import clean_name, normalize_name_columns, slugify_name
+    from ..utils.retry_utils import requests_get_with_retry
+except ImportError:
+    from name_utils import clean_name, normalize_name_columns, slugify_name
+    from utils.retry_utils import requests_get_with_retry
 
 API_BASE = "https://www.thesportsdb.com/api/v1/json"
 CACHE_DIR = os.path.join("data", "raw", "cache")

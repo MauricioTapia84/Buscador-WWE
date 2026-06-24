@@ -163,6 +163,64 @@ def _normalize_titles_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _enrich_titles_frame(df: pd.DataFrame) -> pd.DataFrame:
+    out = _normalize_titles_frame(df)
+    if out.empty:
+        return out
+
+    if "title_slug" not in out.columns:
+        out["title_slug"] = out.get("title", pd.Series(dtype="object")).map(_slugify)
+    else:
+        out["title_slug"] = out["title_slug"].fillna(out.get("title")).map(_slugify)
+
+    if "event_date" not in out.columns:
+        if "start_date" in out.columns:
+            out["event_date"] = out["start_date"]
+        elif "won_date" in out.columns:
+            out["event_date"] = out["won_date"]
+        else:
+            out["event_date"] = pd.NaT
+
+    sort_columns = [
+        column
+        for column in ["title_slug", "start_date", "won_date", "overall_reign", "champion_reign_number"]
+        if column in out.columns
+    ]
+    if sort_columns:
+        out = out.sort_values(sort_columns, na_position="last").reset_index(drop=True)
+
+    if "overall_reign" not in out.columns:
+        out["overall_reign"] = pd.NA
+    if "champion_reign_number" not in out.columns:
+        out["champion_reign_number"] = pd.NA
+
+    for title_slug, indexes in out.groupby("title_slug", dropna=False).groups.items():
+        if not title_slug:
+            continue
+        title_indexes = list(indexes)
+        previous_holders = out.loc[title_indexes, "holder"].shift(1)
+        next_holders = out.loc[title_indexes, "holder"].shift(-1)
+        next_starts = out.loc[title_indexes, "start_date"].shift(-1) if "start_date" in out.columns else pd.Series(index=title_indexes, dtype="datetime64[ns]")
+        inferred_end = out.loc[title_indexes, "end_date"].copy() if "end_date" in out.columns else pd.Series(index=title_indexes, dtype="datetime64[ns]")
+
+        if "end_date" not in out.columns:
+            out["end_date"] = pd.NaT
+        end_missing = out.loc[title_indexes, "end_date"].isna()
+        inferred_end = out.loc[title_indexes, "end_date"].where(~end_missing, next_starts)
+        out.loc[title_indexes, "end_date"] = inferred_end
+        out.loc[title_indexes, "end_date_inferred"] = end_missing & next_starts.notna()
+        out.loc[title_indexes, "previous_champion"] = previous_holders.values
+        out.loc[title_indexes, "next_champion"] = next_holders.values
+        out.loc[title_indexes, "defeated_for_title"] = previous_holders.values
+        out.loc[title_indexes, "lost_title_to"] = next_holders.values
+        out.loc[title_indexes, "title_lineage_position"] = range(1, len(title_indexes) + 1)
+
+    if "end_date_inferred" not in out.columns:
+        out["end_date_inferred"] = False
+
+    return out
+
+
 def _normalize_matches_frame(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -254,7 +312,7 @@ def _load_wrestlers() -> pd.DataFrame:
 
     title_history = {}
     if not titles.empty:
-        titles = _normalize_titles_frame(titles)
+        titles = _enrich_titles_frame(titles)
         for slug, group in titles.groupby("holder_slug", dropna=False):
             if not slug:
                 continue
@@ -262,7 +320,33 @@ def _load_wrestlers() -> pd.DataFrame:
             ordered = group.sort_values(sort_column, na_position="last") if sort_column else group
             title_history[slug] = _serialize_records(
                 ordered[
-                    [column for column in ["title", "champion_name", "start_date", "end_date", "event_name", "won_date", "reign_days"] if column in ordered.columns]
+                    [
+                        column
+                        for column in [
+                            "title",
+                            "title_slug",
+                            "champion_name",
+                            "start_date",
+                            "end_date",
+                            "end_date_inferred",
+                            "event_name",
+                            "event_date",
+                            "won_date",
+                            "location",
+                            "reign_days",
+                            "days_recognized",
+                            "era",
+                            "notes",
+                            "overall_reign",
+                            "champion_reign_number",
+                            "previous_champion",
+                            "next_champion",
+                            "defeated_for_title",
+                            "lost_title_to",
+                            "title_lineage_position",
+                        ]
+                        if column in ordered.columns
+                    ]
                 ]
             )
 
@@ -342,7 +426,7 @@ def list_wrestlers(source: Optional[str] = None):
 
 @router.get("/titles")
 def list_titles():
-    titles = _normalize_titles_frame(_load_titles())
+    titles = _enrich_titles_frame(_load_titles())
     wrestlers = _load_wrestlers()
     if titles.empty:
         return []

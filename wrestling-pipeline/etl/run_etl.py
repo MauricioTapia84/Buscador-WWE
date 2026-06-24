@@ -2,16 +2,16 @@ import os
 import pandas as pd
 import logging
 try:
-    from logging_config import configure_logging
+    from utils.logging_config import configure_logging
     from validate import validate_and_report
     from extract_thesportsdb import extract_all as extract_thesportsdb
-    from extract_wikipedia import extract_from_wikipedia_urls
+    from extract_wikipedia import extract_from_wikipedia_urls, enrich_wrestlers_from_titles
     from extract_kaggle import read_kaggle_tables
 except ImportError:
-    from etl.logging_config import configure_logging
+    from etl.utils.logging_config import configure_logging
     from etl.validate import validate_and_report
     from etl.extract_thesportsdb import extract_all as extract_thesportsdb
-    from etl.extract_wikipedia import extract_from_wikipedia_urls
+    from etl.extract_wikipedia import extract_from_wikipedia_urls, enrich_wrestlers_from_titles
     from etl.extract_kaggle import read_kaggle_tables
 
 
@@ -93,7 +93,7 @@ def main():
         df = pd.DataFrame(columns=["id", "name"])
     else:
         try:
-            from transform import clean_wrestlers
+            from transform.clean import clean_wrestlers
         except ImportError:
             from etl.transform import clean_wrestlers
         df = clean_wrestlers(source_df)
@@ -122,7 +122,7 @@ def main():
             titles_df = pd.DataFrame(columns=["title", "holder", "won_date", "reign_days", "event_name"])
     else:
         try:
-            from transform import clean_champions
+            from transform.clean import clean_champions
         except ImportError:
             from etl.transform import clean_champions
         titles_df = clean_champions(titles_df)
@@ -130,6 +130,38 @@ def main():
     titles_path = os.path.join(out, "titles_extracted.csv")
     titles_df.to_csv(titles_path, index=False)
     logger.info("Wrote titles CSV", extra={"path": titles_path})
+
+    # Enrich wrestler profiles from Wikipedia summaries + infobox scraping.
+    wiki_enabled = os.getenv("ENABLE_WIKIPEDIA_ENRICHMENT", "1").strip().lower() not in {"0", "false", "no"}
+    if wiki_enabled:
+        try:
+            wikipedia_names = []
+            seen = set()
+            for source_name in list(df.get("name", pd.Series(dtype="object")).dropna().astype(str)) + list(
+                titles_df.get("holder", pd.Series(dtype="object")).dropna().astype(str)
+            ):
+                candidate = str(source_name).strip()
+                if not candidate:
+                    continue
+                lowered = candidate.lower()
+                if lowered in seen:
+                    continue
+                seen.add(lowered)
+                wikipedia_names.append(candidate)
+
+            if wikipedia_names:
+                logger.info("Starting Wikipedia wrestler enrichment", extra={"names": len(wikipedia_names)})
+                wiki_df = enrich_wrestlers_from_titles(wikipedia_names)
+                if not wiki_df.empty:
+                    wiki_path = os.path.join(out, "wrestlers_enriched.csv")
+                    wiki_df.to_csv(wiki_path, index=False)
+                    logger.info("Wrote Wikipedia wrestler enrichment", extra={"path": wiki_path, "rows": len(wiki_df)})
+                else:
+                    logger.warning("Wikipedia wrestler enrichment returned no rows", extra={"names": len(wikipedia_names)})
+            else:
+                logger.warning("Wikipedia wrestler enrichment skipped because no wrestler names were collected")
+        except Exception:
+            logger.exception("Wikipedia enrichment failed")
 
     # Optionally extract wikipedia snippets if provided via env
     wiki_urls = os.getenv("WIKI_URLS", "").split(";") if os.getenv("WIKI_URLS") else []
@@ -144,9 +176,9 @@ def main():
     # run normalization to produce final processed CSVs/parquets
     try:
         try:
-            from normalize import normalize_wrestlers, normalize_matches, normalize_titles
+            from transform.normalize import normalize_wrestlers, normalize_matches, normalize_titles
         except ImportError:
-            from etl.normalize import normalize_wrestlers, normalize_matches, normalize_titles
+            from etl.transform.normalize import normalize_wrestlers, normalize_matches, normalize_titles
         normalize_wrestlers(processed_dir=out)
         normalize_matches(processed_dir=out, raw_dir=raw)
         normalize_titles(processed_dir=out, raw_dir=raw)

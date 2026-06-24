@@ -96,7 +96,6 @@ def _render_analytics_card(wrestler: dict, analytics: dict):
 
     avatar = wrestler.get("artist_name") or wrestler.get("name") or "WWE"
     initials = "".join([part[0] for part in str(avatar).split() if part])[:2].upper() or "WW"
-    real_name = wrestler.get("real_name") or "No disponible"
     height = wrestler.get("height") or "N/D"
     weight = wrestler.get("weight") or "N/D"
 
@@ -244,10 +243,7 @@ def _render_analytics_card(wrestler: dict, analytics: dict):
                 <div class="wrestler-info">
                     <div class="avatar-placeholder">{initials}</div>
                     <div>
-                        <div class="wrestler-name">
-                            {wrestler.get('artist_name') or wrestler.get('name') or 'Sin nombre'}
-                            <small>({_format_value(real_name)})</small>
-                        </div>
+                        <div class="wrestler-name">{wrestler.get('artist_name') or wrestler.get('name') or 'Sin nombre'}</div>
                         <div class="wrestler-meta">
                             <span>📏 {height}</span>
                             <span>⚖️ {weight}</span>
@@ -368,7 +364,6 @@ def render_fanatico_view(search_term: str, wrestlers: list[dict], titles: list[d
 
     with right:
         st.markdown(f"## {_format_value(wrestler.get('artist_name') or wrestler.get('name'))}")
-        st.markdown(f"**Nombre real:** {_format_value(wrestler.get('real_name'))}")
         st.markdown(f"**Fecha de nacimiento:** {_format_value(wrestler.get('birth_date') or wrestler.get('date_born'))}")
 
         facts_a, facts_b = st.columns(2)
@@ -402,26 +397,98 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
         return
 
     history_df = pd.DataFrame(history)
-    if "start_date" in history_df.columns:
-        history_df["start_date"] = pd.to_datetime(history_df["start_date"], errors="coerce")
-    if "end_date" in history_df.columns:
-        history_df["end_date"] = pd.to_datetime(history_df["end_date"], errors="coerce")
+    for column in ["start_date", "end_date", "won_date", "event_date"]:
+        if column in history_df.columns:
+            history_df[column] = pd.to_datetime(history_df[column], errors="coerce")
+    if "days_recognized" in history_df.columns:
+        history_df["days_recognized"] = pd.to_numeric(history_df["days_recognized"], errors="coerce")
+    if "reign_days" in history_df.columns:
+        history_df["reign_days"] = pd.to_numeric(history_df["reign_days"], errors="coerce")
 
-    top_a, top_b, top_c = st.columns(3)
+    top_a, top_b, top_c, top_d = st.columns(4)
     top_a.metric("Reinados registrados", len(history_df))
     top_b.metric("Primer reinado", _format_value(history_df["start_date"].min().date().isoformat() if history_df["start_date"].notna().any() else None))
     top_c.metric("Último evento", _format_value(history_df["event_name"].dropna().iloc[-1] if history_df["event_name"].notna().any() else None))
+    total_days = history_df["days_recognized"].dropna().sum() if "days_recognized" in history_df.columns else 0
+    if not total_days and "reign_days" in history_df.columns:
+        total_days = history_df["reign_days"].dropna().sum()
+    top_d.metric("Días reconocidos", int(total_days) if pd.notna(total_days) else 0)
+
+    eras = []
+    if "era" in history_df.columns:
+        eras = sorted({str(value).strip() for value in history_df["era"].dropna() if str(value).strip()})
+    if eras:
+        st.markdown(f"**Eras cubiertas:** {', '.join(eras)}")
+
+    st.markdown("### Momentos clave")
+    card_columns = st.columns(2)
+    for idx, reign in enumerate(history_df.to_dict(orient="records")):
+        start_date = reign.get("start_date")
+        end_date = reign.get("end_date")
+        period_parts = []
+        if pd.notna(start_date):
+            period_parts.append(start_date.date().isoformat())
+        if pd.notna(end_date):
+            period_parts.append(end_date.date().isoformat())
+        period = " a ".join(period_parts) if period_parts else "Fecha no disponible"
+        location = _format_value(reign.get("location"))
+        event_name = _format_value(reign.get("event_name"))
+        previous_champion = _format_value(reign.get("defeated_for_title"))
+        lost_title_to = _format_value(reign.get("lost_title_to"))
+        era = _format_value(reign.get("era"))
+        notes = _format_value(reign.get("notes"))
+        days_value = reign.get("days_recognized") if reign.get("days_recognized") not in [None, ""] else reign.get("reign_days")
+
+        with card_columns[idx % 2]:
+            st.markdown(
+                f"""
+                <div style="padding:18px;border-radius:20px;background:#ffffff;border:1px solid rgba(15,23,42,0.08);box-shadow:0 12px 32px rgba(15,23,42,0.06);margin-bottom:16px;">
+                    <div style="font-size:13px;color:#64748b;font-weight:700;">Reinado #{idx + 1}</div>
+                    <div style="font-size:20px;font-weight:800;color:#111827;margin:4px 0 8px;">{_format_value(reign.get("title"))}</div>
+                    <div style="font-size:14px;color:#334155;line-height:1.65;">
+                        <strong>Periodo:</strong> {period}<br/>
+                        <strong>Evento:</strong> {event_name}<br/>
+                        <strong>Ubicación:</strong> {location}<br/>
+                        <strong>Venció a:</strong> {previous_champion}<br/>
+                        <strong>Lo perdió ante:</strong> {lost_title_to}<br/>
+                        <strong>Era:</strong> {era}<br/>
+                        <strong>Días:</strong> {_format_value(days_value, 'No disponible')}<br/>
+                        <strong>Notas:</strong> {notes}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     st.markdown("### Cronología")
     timeline = history_df.copy()
-    for column in ["start_date", "end_date", "won_date"]:
+    for column in ["start_date", "end_date", "won_date", "event_date"]:
         if column in timeline.columns:
             timeline[column] = pd.to_datetime(timeline[column], errors="coerce")
             if pd.api.types.is_datetime64_any_dtype(timeline[column]):
                 timeline[column] = timeline[column].dt.strftime("%Y-%m-%d")
             else:
                 timeline[column] = timeline[column].astype(str)
-    keep = [column for column in ["title", "start_date", "end_date", "event_name", "won_date", "reign_days"] if column in timeline.columns]
+    keep = [
+        column
+        for column in [
+            "title",
+            "overall_reign",
+            "champion_reign_number",
+            "start_date",
+            "end_date",
+            "end_date_inferred",
+            "event_name",
+            "location",
+            "reign_days",
+            "days_recognized",
+            "era",
+            "defeated_for_title",
+            "lost_title_to",
+            "notes",
+        ]
+        if column in timeline.columns
+    ]
     st.dataframe(timeline[keep], use_container_width=True, hide_index=True)
 
     counts = history_df["title"].fillna("Sin título").value_counts().reset_index()
