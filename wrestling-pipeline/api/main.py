@@ -502,5 +502,39 @@ def health():
         "raw_dir": str(RAW_DIR),
     }
 
+from pydantic import BaseModel
+import joblib
+
+class PredictRequest(BaseModel):
+    total_wins: float
+    total_losses: float
+    total_matches: float
+    win_rate: float
+
+@router.post("/predict")
+def predict_champion(req: PredictRequest):
+    model_path = _default_data_root().parent / "models" / "champion_predictor.pkl"
+    if not model_path.exists():
+        raise HTTPException(status_code=503, detail="El modelo no ha sido entrenado aún.")
+    
+    model = joblib.load(model_path)
+    X = pd.DataFrame([req.dict()])
+    
+    prob = model.predict_proba(X)[0][1] if hasattr(model, 'predict_proba') else 0.0
+    pred = model.predict(X)[0]
+    
+    return {
+        "is_champion_prediction": int(pred),
+        "probability_percent": round(prob * 100, 2)
+    }
+
+@router.get("/stats")
+def get_clean_stats():
+    # Return the clean unified dataset created by unify.py
+    path = PROCESSED_DIR / "wrestling_clean.csv"
+    if not path.exists():
+        return []
+    df = pd.read_csv(path)
+    return df.to_dict(orient="records")
 
 app.include_router(router)

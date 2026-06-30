@@ -4,9 +4,10 @@ import unicodedata
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-from data_client import search_catalog
+from data_client import search_catalog, predict_champion, fetch_clean_stats
 
 ADMIN_SECRET = "K#9vLp$2mQx@7nRf!4Zd"
 
@@ -803,6 +804,99 @@ def _pick_wrestler(search_term: str, wrestlers: list[dict], label: str):
     return selected, error
 
 
+def _render_predictor_ui(wrestler: dict):
+    stats_list, err = fetch_clean_stats()
+    if err or not stats_list:
+        st.warning("No se pudieron cargar las estadísticas optimizadas para la predicción.")
+        return
+
+    name = _format_value(wrestler.get("artist_name") or wrestler.get("name"))
+    
+    # Try to find the wrestler in the clean stats
+    matched_stat = next((s for s in stats_list if s.get("artist_name", "").lower() == name.lower()), None)
+    
+    if not matched_stat:
+        st.info("No hay datos históricos optimizados para predecir el futuro de este luchador.")
+        return
+
+    st.markdown("---")
+    st.markdown("### 🔮 Predictor de Campeonatos (Machine Learning)")
+    st.markdown("Con base en los datos limpios y unificados, calcula la probabilidad de que este luchador gane un título.")
+    
+    # Show clean KPI cards using glassmorphism styling
+    st.markdown(
+        """
+        <style>
+        .kpi-glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            color: #fff;
+        }
+        .kpi-glass .kpi-value {
+            font-size: 28px;
+            font-weight: 900;
+            color: #eab308; /* Gold accent */
+            margin-bottom: 5px;
+        }
+        .kpi-glass .kpi-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #d1d5db;
+            text-transform: uppercase;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    t_wins = matched_stat.get("total_wins", 0)
+    t_losses = matched_stat.get("total_losses", 0)
+    t_matches = matched_stat.get("total_matches", 0)
+    w_rate = matched_stat.get("win_rate", 0)
+
+    # We wrap them in a dark container for contrast
+    st.markdown('<div style="background: linear-gradient(135deg, #1f2937, #7f1d1d); padding: 20px; border-radius: 20px;">', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(f'<div class="kpi-glass"><div class="kpi-value">{t_matches}</div><div class="kpi-label">Combates</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="kpi-glass"><div class="kpi-value">{t_wins}</div><div class="kpi-label">Victorias</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="kpi-glass"><div class="kpi-value">{t_losses}</div><div class="kpi-label">Derrotas</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="kpi-glass"><div class="kpi-value">{w_rate:.1f}%</div><div class="kpi-label">Win Rate</div></div>', unsafe_allow_html=True)
+    
+    if st.button("✨ Ejecutar Modelo Predictivo"):
+        with st.spinner("Analizando historial..."):
+            pred_data, error = predict_champion(t_wins, t_losses, t_matches, w_rate)
+        
+        if error or not pred_data:
+            st.error(f"Error al conectar con el modelo: {error}")
+        else:
+            prob = pred_data.get("probability_percent", 0.0)
+            
+            fig = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = prob,
+                title = {'text': "Probabilidad de Campeonato", 'font': {'size': 20, 'color': '#ffffff'}},
+                number = {'suffix': "%", 'font': {'color': '#eab308', 'size': 50}},
+                gauge = {
+                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "white"},
+                    'bar': {'color': "#eab308"},
+                    'bgcolor': "rgba(255, 255, 255, 0.1)",
+                    'borderwidth': 2,
+                    'bordercolor': "gray",
+                    'steps': [
+                        {'range': [0, 40], 'color': "rgba(239, 68, 68, 0.3)"},
+                        {'range': [40, 70], 'color': "rgba(234, 179, 8, 0.3)"},
+                        {'range': [70, 100], 'color': "rgba(34, 197, 94, 0.3)"}],
+                }
+            ))
+            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font={'color': "white"}, height=350)
+            st.plotly_chart(fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
 def render_fanatico_view(search_term: str, wrestlers: list[dict], titles: list[dict]):
     st.subheader("Perfil Fanático")
     st.caption("Ficha visual, biografía y datos curiosos del personaje.")
@@ -814,6 +908,9 @@ def render_fanatico_view(search_term: str, wrestlers: list[dict], titles: list[d
         st.info("No hay luchadores disponibles todavía.")
         return
     st.markdown(_profile_card_html(wrestler, condensed=False), unsafe_allow_html=True)
+    
+    _render_predictor_ui(wrestler)
+
 
 
 def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list[dict]):
@@ -827,6 +924,8 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
     if not wrestler:
         st.info("No hay luchadores disponibles todavía.")
         return
+        
+    _render_predictor_ui(wrestler)
 
     history = wrestler.get("title_history") or []
     if not history:

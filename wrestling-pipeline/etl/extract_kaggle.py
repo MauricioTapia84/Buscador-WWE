@@ -97,5 +97,5 @@ def extract_all_sqlite(raw_dir: str):
             print("No SQLite database or matches.csv found in raw folder.")
 
 if __name__ == '__main__':
-    raw_dir = os.path.join('..', 'data', 'raw')
+    raw_dir = os.path.join('data', 'raw')
     extract_all_sqlite(raw_dir)

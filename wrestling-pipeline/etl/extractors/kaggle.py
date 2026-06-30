@@ -101,7 +101,7 @@ def read_kaggle_tables(raw_folder: str = "data/raw") -> dict:
 
 
 @retry_on_exception(attempts=3)
-def extract_from_sqlite(db_path: str = "../data/raw/wwe_matches.sqlite", limit: int = 1000) -> pd.DataFrame:
+def extract_from_sqlite(db_path: str = "data/raw/wwe_matches.sqlite", limit: int = 1000) -> pd.DataFrame:
     logger = logging.getLogger("etl.extract_kaggle")
     try:
         conn = sqlite3.connect(db_path)
@@ -125,24 +125,24 @@ def extract_from_sqlite(db_path: str = "../data/raw/wwe_matches.sqlite", limit: 
         raise
 
 
-def save_matches_csv(df: pd.DataFrame, out_path: str = "../data/raw/matches.csv"):
+def save_matches_csv(df: pd.DataFrame, out_path: str = "data/raw/matches.csv"):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     df.to_csv(out_path, index=False)
 
 
 if __name__ == '__main__':
-    db = os.path.join('..', 'data', 'raw', 'wwe_matches.sqlite')
+    db = os.path.join('data', 'raw', 'wwe_matches.sqlite')
     if os.path.exists(db):
         df = extract_from_sqlite(db_path=db, limit=10000)
     else:
-        csvp = os.path.join('..', 'data', 'raw', 'matches.csv')
+        csvp = os.path.join('data', 'raw', 'matches.csv')
         if os.path.exists(csvp):
             df = pd.read_csv(csvp)
         else:
             df = pd.DataFrame()
 
     save_matches_csv(df)
-    out_proc = os.path.join('..', 'data', 'processed')
+    out_proc = os.path.join('data', 'processed')
     os.makedirs(out_proc, exist_ok=True)
 
     if df.empty:

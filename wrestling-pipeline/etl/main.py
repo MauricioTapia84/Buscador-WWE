@@ -48,30 +48,12 @@ def run_pipeline(sample_names=None, out_prefix: str = "validation_report"):
         matches_df = None
 
     logger.info("Transformando datos", extra={"etl_stage": "transform"})
-    if wrestlers_df is not None:
-        wrestlers_df = clean_wrestlers(wrestlers_df)
-    champions_df = None
     try:
-        champions_raw = None
-        # attempt to read champions file if exists
-        import os
-        import pandas as pd
-
-        champions_path = os.path.join("..", "data", "raw", "champions.csv")
-        if os.path.exists(champions_path):
-            champions_raw = pd.read_csv(champions_path)
-    except Exception:
-        champions_raw = None
-
-    if champions_raw is not None:
-        champions_df = clean_champions(champions_raw)
-
-    logger.info("Validando datos", extra={"etl_stage": "validate"})
-    reports = validate_and_report(wrestlers_df=wrestlers_df, champions_df=champions_df, out_prefix=out_prefix)
-    logger.info("Validation reports", extra={"reports": reports})
-
-    logger.info("Cargando datos", extra={"etl_stage": "load"})
-    load_data(wrestlers_df=wrestlers_df, champions_df=champions_df)
+        from unify import run_unification
+        run_unification()
+        logger.info("Unificación finalizada con éxito.")
+    except Exception as e:
+        logger.error(f"Error en unificación: {e}")
 
     logger.info("ETL completado", extra={"etl_stage": "done"})
 

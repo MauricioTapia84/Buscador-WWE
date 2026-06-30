@@ -7,7 +7,7 @@ from ..utils.retry_utils import retry_on_exception
 
 
 @retry_on_exception(attempts=3)
-def load_data(wrestlers_df: Optional[pd.DataFrame] = None, champions_df: Optional[pd.DataFrame] = None, db_path: str = "../data/processed/wrestling.db"):
+def load_data(wrestlers_df: Optional[pd.DataFrame] = None, champions_df: Optional[pd.DataFrame] = None, db_path: str = "data/processed/wrestling.db"):
     conn = sqlite3.connect(db_path)
     try:
         if wrestlers_df is not None:

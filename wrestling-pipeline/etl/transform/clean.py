@@ -10,7 +10,7 @@ def clean_wrestlers(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     can expose fan and journalist views without losing source metadata.
     """
     if df is None:
-        df = pd.read_csv("../data/raw/wrestlers_api.csv")
+        df = pd.read_csv("data/raw/wrestlers_api.csv")
 
     # Normalize column names from possible extractor outputs
     mapping = {
@@ -127,7 +127,7 @@ def clean_wrestlers(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
 def clean_champions(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Normalize champions dataframe to expected schema: title, holder, won_date, reign_days"""
     if df is None:
-        df = pd.read_csv("../data/raw/champions.csv")
+        df = pd.read_csv("data/raw/champions.csv")
 
     mapping = {}
     if "champion" in df.columns:

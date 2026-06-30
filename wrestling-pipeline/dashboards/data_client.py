@@ -65,3 +65,35 @@ def search_catalog(term: str) -> tuple[dict[str, Any] | None, str | None]:
     if isinstance(data, dict):
         return data, None
     return None, error
+
+
+def _post_json(path: str, json_data: dict[str, Any]) -> tuple[Any, str | None]:
+    url = f"{get_api_url()}{path}"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "WrestlingDataExplorerDashboard/1.0",
+    }
+    try:
+        response = requests.post(url, json=json_data, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json(), None
+    except requests.RequestException as exc:
+        return None, str(exc)
+
+def predict_champion(total_wins: float, total_losses: float, total_matches: float, win_rate: float) -> tuple[dict[str, Any] | None, str | None]:
+    payload = {
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_matches": total_matches,
+        "win_rate": win_rate
+    }
+    return _post_json("/predict", json_data=payload)
+
+@st.cache_data(ttl=60)
+def fetch_clean_stats() -> tuple[list[dict[str, Any]], str | None]:
+    data, error = _request_json("/stats")
+    if isinstance(data, list):
+        return data, None
+    return [], error
+
