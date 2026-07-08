@@ -60,6 +60,14 @@ left.metric("Luchadores visibles", len(wrestlers))
 center.metric("Titulos visibles", len(titles))
 right.metric("Estado API", "Conectada" if health else "Sin respuesta")
 
+if health and health.get("model_loaded"):
+    st.markdown(
+        f"**Modelo en línea:** {health.get('model_name', 'Desconocido')}  "
+        f"F1: {health.get('model_f1', 0):.3f} · Accuracy: {health.get('model_accuracy', 0):.3f}"
+    )
+else:
+    st.markdown("**Modelo en línea:** No cargado / no disponible")
+
 if health_error:
     st.warning(
         "No se pudo consultar `/health`. El dashboard queda listo igual, "

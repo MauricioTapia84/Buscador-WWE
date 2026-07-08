@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from data_client import search_catalog, predict_champion, fetch_clean_stats
+from data_client import fetch_health, search_catalog, predict_champion, fetch_clean_stats
 
 ADMIN_SECRET = "K#9vLp$2mQx@7nRf!4Zd"
 
@@ -86,6 +86,34 @@ def _format_value(value, fallback="No disponible"):
     return text if text else fallback
 
 
+def _normalize_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    return re.sub(r"[^a-z0-9]+", "", text)
+
+
+def _find_matching_stat(name: str, stats_list: list[dict]) -> dict | None:
+    normalized_name = _normalize_text(name)
+    if not normalized_name:
+        return None
+
+    # Exact match on name variants
+    for stat in stats_list:
+        for field in ["artist_name", "name", "canonical_name"]:
+            if _normalize_text(stat.get(field)) == normalized_name:
+                return stat
+
+    # Partial or fuzzy-like contains match
+    for stat in stats_list:
+        for field in ["artist_name", "name", "canonical_name"]:
+            value = _normalize_text(stat.get(field))
+            if value and (normalized_name in value or value in normalized_name):
+                return stat
+
+    return None
+
+
 def _safe_date_label(value):
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
@@ -93,6 +121,13 @@ def _safe_date_label(value):
     if pd.isna(parsed):
         return None
     return parsed.date().isoformat()
+
+
+def _build_history_frame(history) -> pd.DataFrame:
+    if not isinstance(history, list):
+        return pd.DataFrame()
+    valid_history = [item for item in history if isinstance(item, dict)]
+    return pd.DataFrame(valid_history) if valid_history else pd.DataFrame()
 
 
 def _history_days(history_df: pd.DataFrame) -> int:
@@ -376,7 +411,7 @@ def _render_analyst_styles():
 def _build_roster_frame(wrestlers: list[dict]) -> pd.DataFrame:
     rows = []
     for wrestler in wrestlers or []:
-        history = pd.DataFrame(wrestler.get("title_history") or [])
+        history = _build_history_frame(wrestler.get("title_history"))
         total_days = _history_days(history) if not history.empty else 0
         dominant_title = None
         dominant_era = None
@@ -474,8 +509,11 @@ def _profile_card_html(wrestler: dict, condensed: bool = False) -> str:
         bio = bio[:257].rstrip() + "..."
     image_url = wrestler.get("image_url") or wrestler.get("image_large") or wrestler.get("image_path")
     history = wrestler.get("title_history") or []
-    reign_count = len(history)
-    title_count = len({item.get("title") for item in history if item.get("title")})
+    if not isinstance(history, list):
+        history = []
+    valid_history = [item for item in history if isinstance(item, dict)]
+    reign_count = len(valid_history)
+    title_count = len({item.get("title") for item in valid_history if item.get("title")})
     photo_block = (
         f'<div style="display:flex;align-items:center;justify-content:center;min-height:360px;max-height:460px;padding:18px;border-radius:22px;background:#ffffff;border:1px solid rgba(36,52,71,0.08);overflow:hidden;">'
         f'<img src="{image_url}" alt="{name}" style="width:100%;max-height:420px;object-fit:contain;object-position:center;border-radius:16px;" />'
@@ -806,23 +844,48 @@ def _pick_wrestler(search_term: str, wrestlers: list[dict], label: str):
 
 def _render_predictor_ui(wrestler: dict):
     stats_list, err = fetch_clean_stats()
-    if err or not stats_list:
-        st.warning("No se pudieron cargar las estadísticas optimizadas para la predicción.")
+    if err:
+        st.warning(f"No se pudieron cargar las estadísticas optimizadas para la predicción: {err}")
+        return
+    if not stats_list:
+        st.info("No hay datos históricos optimizados para predecir el futuro de este luchador. Verifica que `/stats` devuelva registros.")
         return
 
-    name = _format_value(wrestler.get("artist_name") or wrestler.get("name"))
-    
-    # Try to find the wrestler in the clean stats
-    matched_stat = next((s for s in stats_list if s.get("artist_name", "").lower() == name.lower()), None)
-    
-    if not matched_stat:
+    candidate_names = []
+    for field in ["artist_name", "canonical_name", "name", "display_name", "name_slug"]:
+        value = wrestler.get(field)
+        if value and str(value).strip():
+            candidate_names.append(str(value).strip())
+
+    if not candidate_names:
         st.info("No hay datos históricos optimizados para predecir el futuro de este luchador.")
         return
 
+    matched_stat = None
+    for candidate in candidate_names:
+        matched_stat = _find_matching_stat(candidate, stats_list)
+        if matched_stat:
+            break
+
+    if not matched_stat:
+        st.info(
+            "No hay datos históricos optimizados para predecir el futuro de este luchador. "
+            f"Nombres consultados: {', '.join(candidate_names[:3])}"
+        )
+        return
+
     st.markdown("---")
+    health_info, health_error = fetch_health()
+    model_name = health_info.get('model_name') if health_info else None
+    model_f1 = health_info.get('model_f1') if health_info else None
+
     st.markdown("### 🔮 Predictor de Campeonatos (Machine Learning)")
     st.markdown("Con base en los datos limpios y unificados, calcula la probabilidad de que este luchador gane un título.")
-    
+    if model_name:
+        st.caption(f"Modelo activo: {model_name} • F1 estimado: {model_f1:.3f}")
+    else:
+        st.caption("Modelo activo: no disponible. La predicción usará el endpoint `/predict`.")
+
     # Show clean KPI cards using glassmorphism styling
     st.markdown(
         """
@@ -866,34 +929,61 @@ def _render_predictor_ui(wrestler: dict):
     c2.markdown(f'<div class="kpi-glass"><div class="kpi-value">{t_wins}</div><div class="kpi-label">Victorias</div></div>', unsafe_allow_html=True)
     c3.markdown(f'<div class="kpi-glass"><div class="kpi-value">{t_losses}</div><div class="kpi-label">Derrotas</div></div>', unsafe_allow_html=True)
     c4.markdown(f'<div class="kpi-glass"><div class="kpi-value">{w_rate:.1f}%</div><div class="kpi-label">Win Rate</div></div>', unsafe_allow_html=True)
-    
+
+    if t_matches < 10:
+        st.warning("Datos de combate limitados: menos de 10 combates registrados. La predicción puede ser menos confiable.")
+
+    st.markdown("#### Datos que alimentan al modelo")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Combates", f"{int(t_matches)}")
+    metric_cols[1].metric("Victorias", f"{int(t_wins)}")
+    metric_cols[2].metric("Derrotas", f"{int(t_losses)}")
+    metric_cols[3].metric("Win rate", f"{w_rate:.1f}%")
+
+    st.markdown(
+        '<div style="padding:18px;border-radius:18px;background:#f3f4f6;border:1px solid #d1d5db;margin-top:14px;">'
+        '<strong>Interpretación rápida:</strong> Estos datos representan el desempeño histórico del luchador y se usan para estimar la probabilidad de un campeonato.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
     if st.button("✨ Ejecutar Modelo Predictivo"):
         with st.spinner("Analizando historial..."):
             pred_data, error = predict_champion(t_wins, t_losses, t_matches, w_rate)
-        
+
         if error or not pred_data:
             st.error(f"Error al conectar con el modelo: {error}")
         else:
-            prob = pred_data.get("probability_percent", 0.0)
-            
+            prob = float(pred_data.get("probability_percent", 0.0))
+            pred = int(pred_data.get("is_champion_prediction", 0))
+            label = "Sí" if pred == 1 else "No"
+            interpretation = (
+                "Alta probabilidad de convertirse en campeón" if prob >= 70
+                else "Probabilidad moderada de campeonato" if prob >= 40
+                else "Probabilidad baja de campeonato"
+            )
+
+            st.markdown(f"**Predicción final:** {label}")
+            st.markdown(f"**Interpretación:** {interpretation}")
+
             fig = go.Figure(go.Indicator(
                 mode = "gauge+number",
                 value = prob,
-                title = {'text': "Probabilidad de Campeonato", 'font': {'size': 20, 'color': '#ffffff'}},
-                number = {'suffix': "%", 'font': {'color': '#eab308', 'size': 50}},
+                title = {'text': "Probabilidad de Campeonato", 'font': {'size': 20, 'color': '#111827'}},
+                number = {'suffix': "%", 'font': {'color': '#111827', 'size': 44}},
                 gauge = {
-                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "white"},
-                    'bar': {'color': "#eab308"},
-                    'bgcolor': "rgba(255, 255, 255, 0.1)",
-                    'borderwidth': 2,
-                    'bordercolor': "gray",
+                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#64748b"},
+                    'bar': {'color': "#2563eb"},
+                    'bgcolor': "rgba(243, 244, 246, 1)",
+                    'borderwidth': 1,
+                    'bordercolor': "#cbd5e1",
                     'steps': [
-                        {'range': [0, 40], 'color': "rgba(239, 68, 68, 0.3)"},
-                        {'range': [40, 70], 'color': "rgba(234, 179, 8, 0.3)"},
-                        {'range': [70, 100], 'color': "rgba(34, 197, 94, 0.3)"}],
+                        {'range': [0, 40], 'color': "rgba(148, 163, 184, 0.35)"},
+                        {'range': [40, 70], 'color': "rgba(59, 130, 246, 0.28)"},
+                        {'range': [70, 100], 'color': "rgba(37, 99, 235, 0.2)"}],
                 }
             ))
-            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font={'color': "white"}, height=350)
+            fig.update_layout(paper_bgcolor="rgba(255,255,255,0.98)", plot_bgcolor="rgba(255,255,255,0.98)", font={'color': "#111827"}, height=350)
             st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -927,12 +1017,11 @@ def render_periodista_view(search_term: str, wrestlers: list[dict], titles: list
         
     _render_predictor_ui(wrestler)
 
-    history = wrestler.get("title_history") or []
-    if not history:
+    history_df = _build_history_frame(wrestler.get("title_history"))
+    if history_df.empty:
         st.warning("Este luchador no tiene reinados enlazados en los datos actuales.")
         return
 
-    history_df = pd.DataFrame(history)
     for column in ["start_date", "end_date", "won_date", "event_date"]:
         if column in history_df.columns:
             history_df[column] = pd.to_datetime(history_df[column], errors="coerce")
@@ -1477,7 +1566,7 @@ def render_developer_view(search_term: str, wrestlers: list[dict], titles: list[
             _plot_layout(compare_fig, height=320)
             st.plotly_chart(compare_fig, use_container_width=True)
 
-        history = pd.DataFrame(wrestler.get("title_history") or [])
+        history = _build_history_frame(wrestler.get("title_history"))
         if not history.empty and "title" in history.columns:
             counts = history["title"].fillna("Sin título").value_counts().reset_index()
             counts.columns = ["title", "count"]

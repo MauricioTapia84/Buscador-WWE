@@ -1,0 +1,44 @@
+{
+  "accuracy": 0.946058091286307,
+  "f1_score": 0.543859649122807,
+  "roc_auc": 0.9530297894982361,
+  "classification_report": {
+    "0": {
+      "precision": 0.9932356257046223,
+      "recall": 0.9503775620280475,
+      "f1-score": 0.9713340683572216,
+      "support": 3708.0
+    },
+    "1": {
+      "precision": 0.4025974025974026,
+      "recall": 0.8378378378378378,
+      "f1-score": 0.543859649122807,
+      "support": 148.0
+    },
+    "accuracy": 0.946058091286307,
+    "macro avg": {
+      "precision": 0.6979165141510124,
+      "recall": 0.8941076999329427,
+      "f1-score": 0.7575968587400144,
+      "support": 3856.0
+    },
+    "weighted avg": {
+      "precision": 0.9705659013737435,
+      "recall": 0.946058091286307,
+      "f1-score": 0.9549268551708385,
+      "support": 3856.0
+    }
+  },
+  "model_name": "LogisticRegression",
+  "best_score": 0.7409421347641792,
+  "feature_columns": [
+    "total_wins",
+    "total_losses",
+    "total_matches",
+    "win_rate"
+  ],
+  "class_balance": {
+    "0": 18540,
+    "1": 738
+  }
+}

@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+cd "$(dirname "$0")/.."
 
 echo "==============================================="
 echo "🧹 Limpiando red y contenedores zombies previos..."

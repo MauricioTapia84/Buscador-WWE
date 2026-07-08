@@ -3,6 +3,8 @@
 This file makes the `etl` directory importable as a package for tests and CI.
 """
 
+from . import extract_thesportsdb
+from . import extract_thesportsdb
 from .extractors import (
     read_kaggle_tables,
     extract_from_sqlite,
@@ -21,6 +23,7 @@ __all__ = [
     "normalize_matches_df",
     "extract_wrestlers_from_thesportsdb",
     "extract_wikipedia_pages",
+    "extract_thesportsdb",
     "clean_wrestlers",
     "clean_champions",
     "normalize_wrestlers",
