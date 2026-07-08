@@ -33,10 +33,11 @@ def _read_csv_if_exists(path: str) -> pd.DataFrame:
 
 
 def _target_slugs(processed_dir: str | None = None) -> set[str]:
-    target_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "target_wrestlers.txt")
-    if os.path.exists(target_file):
-        return load_target_slugs(target_file)
-    return load_target_slugs()
+    if processed_dir:
+        target_file = os.path.join(processed_dir, "target_wrestlers.txt")
+        if os.path.exists(target_file):
+            return load_target_slugs(target_file)
+    return set()
 
 
 def _fuzzy_group_key(name: str, existing: list[str], score_cutoff: int) -> str | None:
@@ -123,7 +124,10 @@ def normalize_wrestlers(processed_dir="data/processed"):
         merged["biography"] = first_non_empty(merged.get("description"), merged.get("extract"))
         records.append(merged)
 
-    out_df = pd.DataFrame(records).sort_values(["canonical_name", "name_slug"], na_position="last")
+    if records:
+        out_df = pd.DataFrame(records).sort_values(["canonical_name", "name_slug"], na_position="last")
+    else:
+        out_df = pd.DataFrame(columns=["canonical_name", "name_slug"])
     out_df.to_csv(out_csv, index=False)
     try:
         out_df.to_parquet(out_parquet, index=False)
@@ -165,12 +169,6 @@ def normalize_matches(processed_dir="data/processed", raw_dir="data/raw"):
     }
     df = df.rename(columns={src: dst for src, dst in rename_map.items() if src in df.columns and dst not in df.columns})
     df = normalize_name_columns(df, ["winner", "loser"])
-    target_slugs = _target_slugs(processed_dir)
-    if target_slugs and not df.empty:
-        winner_mask = df["winner"].apply(lambda value: is_target_name(value, target_slugs)) if "winner" in df.columns else pd.Series(False, index=df.index)
-        loser_mask = df["loser"].apply(lambda value: is_target_name(value, target_slugs)) if "loser" in df.columns else pd.Series(False, index=df.index)
-        df = df[winner_mask | loser_mask].copy()
-
     for column in [col for col in df.columns if "date" in col.lower()]:
         try:
             df[column] = pd.to_datetime(df[column], errors="coerce")

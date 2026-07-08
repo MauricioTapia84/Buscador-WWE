@@ -1,77 +1,36 @@
 
 import logging
+import os
+import sys
+
+# Ensure the repository root is importable when running `python etl/main.py`
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 try:
     from utils.logging_config import configure_logging
-    from extract_thesportsdb import get_wrestler
-    from extract_wikipedia import extract_wikipedia_pages
-    from extract_kaggle import extract_from_sqlite
-    from transform import clean_wrestlers, clean_champions
-    from load import load_data
-    from validate import validate_and_report
+    from etl.unify_sources import run_unification
 except ImportError:
     from etl.utils.logging_config import configure_logging
-    from etl.extract_thesportsdb import get_wrestler
-    from etl.extract_wikipedia import extract_wikipedia_pages
-    from etl.extract_kaggle import extract_from_sqlite
-    from etl.transform import clean_wrestlers, clean_champions
-    from etl.load import load_data
-    from etl.validate import validate_and_report
+    from etl.unify_sources import run_unification
 
 
-def run_pipeline(sample_names=None, out_prefix: str = "validation_report"):
+def run_pipeline(out_prefix: str = "validation_report"):
     configure_logging()
     logger = logging.getLogger("etl.main")
-    logger.info("Starting pipeline", extra={"etl_stage": "start"})
+    logger.info("Starting ETL pipeline", extra={"etl_stage": "start"})
 
-    # Simple extraction: call external APIs for a list of sample names
-    if sample_names is None:
-        sample_names = ["Undertaker", "John_Cena", "Roman_Reigns"]
+    raw_dir = os.getenv("DATA_RAW", "data/raw")
+    processed_dir = os.getenv("DATA_PROCESSED", "data/processed")
+    os.makedirs(processed_dir, exist_ok=True)
 
-    logger.info("Extrayendo datos", extra={"etl_stage": "extract"})
-    wrestlers_list = []
-    for name in sample_names:
-        w = get_wrestler(name)
-        if w:
-            wrestlers_list.append(w)
-
-    wrestlers_df = None
-    if wrestlers_list:
-        import pandas as pd
-
-        wrestlers_df = pd.DataFrame(wrestlers_list)
-
-    # Also try to extract any local sqlite source (kaggle / provided DB)
+    logger.info("Running source unification", extra={"raw_dir": raw_dir, "processed_dir": processed_dir})
     try:
-        matches_df = extract_from_sqlite()
-        logger.info("Extracted matches", extra={"rows": len(matches_df)})
+        run_unification(raw_dir=raw_dir, processed_dir=processed_dir)
+        logger.info("Unificación finalizada con éxito.")
     except Exception:
-        matches_df = None
-
-    logger.info("Transformando datos", extra={"etl_stage": "transform"})
-    if wrestlers_df is not None:
-        wrestlers_df = clean_wrestlers(wrestlers_df)
-    champions_df = None
-    try:
-        champions_raw = None
-        # attempt to read champions file if exists
-        import os
-        import pandas as pd
-
-        champions_path = os.path.join("..", "data", "raw", "champions.csv")
-        if os.path.exists(champions_path):
-            champions_raw = pd.read_csv(champions_path)
-    except Exception:
-        champions_raw = None
-
-    if champions_raw is not None:
-        champions_df = clean_champions(champions_raw)
-
-    logger.info("Validando datos", extra={"etl_stage": "validate"})
-    reports = validate_and_report(wrestlers_df=wrestlers_df, champions_df=champions_df, out_prefix=out_prefix)
-    logger.info("Validation reports", extra={"reports": reports})
-
-    logger.info("Cargando datos", extra={"etl_stage": "load"})
-    load_data(wrestlers_df=wrestlers_df, champions_df=champions_df)
+        logger.exception("Error en unificación")
 
     logger.info("ETL completado", extra={"etl_stage": "done"})
 

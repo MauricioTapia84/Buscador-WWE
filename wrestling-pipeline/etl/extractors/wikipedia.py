@@ -374,7 +374,7 @@ def enrich_wrestlers_from_titles(titles: List[str]) -> pd.DataFrame:
     return normalize_name_columns(merged, ["name", "real_name"])
 
 
-def run_and_save(out_raw: str = "../data/raw", out_processed: str = "../data/processed"):
+def run_and_save(out_raw: str = "data/raw", out_processed: str = "data/processed"):
     os.makedirs(out_raw, exist_ok=True)
     os.makedirs(out_processed, exist_ok=True)
 

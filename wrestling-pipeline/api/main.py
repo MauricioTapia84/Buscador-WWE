@@ -1,9 +1,11 @@
+import json
 import os
 import re
 import unicodedata
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, FastAPI, HTTPException
 
@@ -59,15 +61,22 @@ def _slugify(value) -> str:
 def _clean_value(value):
     if value is None:
         return None
-    if isinstance(value, float) and pd.isna(value):
-        return None
     try:
-        missing = pd.isna(value)
-        if isinstance(missing, bool) and missing:
+        if pd.isna(value):
             return None
     except Exception:
         pass
-    return value
+
+    if isinstance(value, (np.generic,)):
+        try:
+            return value.item()
+        except Exception:
+            pass
+
+    if isinstance(value, (int, float, bool, str)):
+        return value
+
+    return str(value)
 
 
 def _first_non_empty(*values):
@@ -496,11 +505,70 @@ def list_matches():
 
 @router.get("/health")
 def health():
+    model_path = _default_data_root().parent / "models" / "champion_predictor.pkl"
+    metrics_path = _default_data_root().parent / "models" / "evaluation_report.json"
+    model_loaded = model_path.exists()
+    model_f1 = None
+    model_accuracy = None
+    model_name = None
+
+    if metrics_path.exists():
+        try:
+            with open(metrics_path, 'r', encoding='utf-8') as handler:
+                metrics = json.load(handler)
+            model_name = metrics.get('model_name')
+            model_f1 = metrics.get('f1_score')
+            model_accuracy = metrics.get('accuracy')
+        except Exception:
+            model_name = None
+
     return {
         "status": "ok",
         "processed_dir": str(PROCESSED_DIR),
         "raw_dir": str(RAW_DIR),
+        "model_loaded": model_loaded,
+        "model_name": model_name,
+        "model_f1": model_f1,
+        "model_accuracy": model_accuracy,
     }
 
+from pydantic import BaseModel
+import joblib
+
+class PredictRequest(BaseModel):
+    total_wins: float
+    total_losses: float
+    total_matches: float
+    win_rate: float
+
+@router.post("/predict")
+def predict_champion(req: PredictRequest):
+    model_path = _default_data_root().parent / "models" / "champion_predictor.pkl"
+    if not model_path.exists():
+        raise HTTPException(status_code=503, detail="El modelo no ha sido entrenado aún.")
+    
+    model = joblib.load(model_path)
+    X = pd.DataFrame([req.dict()])
+    
+    prob = float(model.predict_proba(X)[0][1]) if hasattr(model, 'predict_proba') else 0.0
+    pred = int(model.predict(X)[0])
+    
+    return {
+        "is_champion_prediction": pred,
+        "probability_percent": round(prob * 100, 2)
+    }
+
+@router.get("/stats")
+def get_clean_stats():
+    # Return the clean unified dataset created by unify.py
+    path = PROCESSED_DIR / "wrestling_clean.csv"
+    if not path.exists():
+        return []
+    df = pd.read_csv(path)
+    if "name" in df.columns:
+        df["name_slug"] = df["name"].map(_slugify)
+        if "canonical_name" not in df.columns:
+            df["canonical_name"] = df["name"]
+    return _serialize_records(df)
 
 app.include_router(router)
