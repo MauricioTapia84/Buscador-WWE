@@ -97,20 +97,27 @@ st.markdown(
         border-radius: 12px;
         min-height: auto !important;
         transition: all 0.18s ease;
-        color: var(--brand-muted) !important;
+        color: #334155 !important;
     }
     div[role="radiogroup"] > label:hover {
-        background: rgba(148, 163, 184, 0.12);
+        background: rgba(254, 215, 170, 0.42);
     }
     div[role="radiogroup"] > label:has(input:checked) {
-        background: linear-gradient(135deg, #1d4ed8, #0f172a);
-        color: #ffffff !important;
-        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+        background: linear-gradient(135deg, #fff7ed, #fed7aa);
+        color: #7c2d12 !important;
+        border: 1px solid rgba(180, 83, 9, 0.22);
+        box-shadow: 0 10px 20px rgba(180, 83, 9, 0.14);
     }
     div[role="radiogroup"] p {
         margin: 0 !important;
         font-weight: 700 !important;
         color: inherit !important;
+    }
+    div[role="radiogroup"] > label:has(input:checked) * {
+        color: #7c2d12 !important;
+    }
+    div[role="radiogroup"] input {
+        accent-color: #b91c1c;
     }
     [data-testid="stPlotlyChart"] {
         background: #ffffff;

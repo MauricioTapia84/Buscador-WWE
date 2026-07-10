@@ -27,7 +27,7 @@ unir por nombre normalizado
 
 Archivo clave:
 
-- [wrestling-pipeline/etl/extract_thesportsdb.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_thesportsdb.py)
+- [wrestling-pipeline/etl/extract_thesportsdb.py](wrestling-pipeline/etl/extract_thesportsdb.py)
 
 Se usa para traer perfil visual del luchador:
 
@@ -62,8 +62,8 @@ https://www.thesportsdb.com/api/v1/json/{API_KEY}/searchplayers.php?p={nombre}
 
 Archivos clave:
 
-- [wrestling-pipeline/etl/extract_wikipedia.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_wikipedia.py)
-- [wrestling-pipeline/etl/extractors/wikipedia.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extractors/wikipedia.py)
+- [wrestling-pipeline/etl/extract_wikipedia.py](wrestling-pipeline/etl/extract_wikipedia.py)
+- [wrestling-pipeline/etl/extractors/wikipedia.py](wrestling-pipeline/etl/extractors/wikipedia.py)
 
 Se usa para:
 
@@ -104,7 +104,7 @@ Importante:
 
 Archivo clave:
 
-- [wrestling-pipeline/etl/extract_kaggle.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_kaggle.py)
+- [wrestling-pipeline/etl/extract_kaggle.py](wrestling-pipeline/etl/extract_kaggle.py)
 
 Se usa para el perfil `Desarrollador / Analista`.
 
@@ -137,7 +137,7 @@ en vez de mandar `analytics: {}`.
 
 Archivo clave:
 
-- [wrestling-pipeline/etl/name_utils.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/name_utils.py)
+- [wrestling-pipeline/etl/name_utils.py](wrestling-pipeline/etl/name_utils.py)
 
 Cada nombre pasa por limpieza estricta:
 
@@ -162,7 +162,7 @@ Esa clave es la identidad técnica del luchador.
 
 Archivo clave:
 
-- [wrestling-pipeline/api/main.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/api/main.py)
+- [wrestling-pipeline/api/main.py](wrestling-pipeline/api/main.py)
 
 La API une los datos usando estas claves:
 
@@ -432,10 +432,10 @@ No el texto original del nombre.
 
 ## 10. Archivos clave
 
-- [wrestling-pipeline/etl/name_utils.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/name_utils.py)
-- [wrestling-pipeline/etl/extract_kaggle.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_kaggle.py)
-- [wrestling-pipeline/etl/extract_thesportsdb.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_thesportsdb.py)
-- [wrestling-pipeline/etl/extract_wikipedia.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extract_wikipedia.py)
-- [wrestling-pipeline/etl/extractors/wikipedia.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/etl/extractors/wikipedia.py)
-- [wrestling-pipeline/api/main.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/api/main.py)
-- [wrestling-pipeline/dashboards/role_views.py](/home/tomy/Downloads/Instituto/Buscador-WWE/wrestling-pipeline/dashboards/role_views.py)
+- [wrestling-pipeline/etl/name_utils.py](wrestling-pipeline/etl/name_utils.py)
+- [wrestling-pipeline/etl/extract_kaggle.py](wrestling-pipeline/etl/extract_kaggle.py)
+- [wrestling-pipeline/etl/extract_thesportsdb.py](wrestling-pipeline/etl/extract_thesportsdb.py)
+- [wrestling-pipeline/etl/extract_wikipedia.py](wrestling-pipeline/etl/extract_wikipedia.py)
+- [wrestling-pipeline/etl/extractors/wikipedia.py](wrestling-pipeline/etl/extractors/wikipedia.py)
+- [wrestling-pipeline/api/main.py](wrestling-pipeline/api/main.py)
+- [wrestling-pipeline/dashboards/role_views.py](wrestling-pipeline/dashboards/role_views.py)

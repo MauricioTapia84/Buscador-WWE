@@ -67,6 +67,15 @@ def _clean_value(value):
     except Exception:
         pass
 
+    if isinstance(value, dict):
+        return {str(key): _clean_value(item) for key, item in value.items()}
+
+    if isinstance(value, (list, tuple)):
+        return [_clean_value(item) for item in value]
+
+    if isinstance(value, pd.Timestamp):
+        return None if pd.isna(value) else value.date().isoformat()
+
     if isinstance(value, (np.generic,)):
         try:
             return value.item()
